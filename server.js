@@ -1,5 +1,6 @@
 require('dotenv').config();
 
+require('module-alias/register');
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -9,11 +10,13 @@ const fs = require('fs').promises;
 const { Server } = require('socket.io');
 const { faker } = require('@faker-js/faker');
 
-const Country = require('./models/Country');
-require('./models/User');
-require('./models/Mobil');
+const Country = require('@models/Country');
+require('@models/User');
+require('@models/Mobil');
 
-const usersRoutes = require('./routes/api');
+const usersRoutes = require('@routes/api');
+const socketRoutes = require('@routes/api_socket');
+const {verifyFirebaseSocketToken} = require('@middlewares/auth');
 
 const app = express();
 const PORT = process.env.PORT || 5050;
@@ -64,25 +67,11 @@ mongoose.connect(process.env.MONGO_URI)
 
         const connectedUsers = new Map();
 
-        io.on('connection', (socket) => {
-            console.log('🧠 Un client s’est connecté via WebSocket :', socket.id);
-            const token = socket.handshake.query.token;
-            console.log('Token:', token);
-        
-            socket.on('user_online', (userId) => {
-                connectedUsers.set(userId, socket.id);
-                console.log(`✅ Utilisateur ${userId} est en ligne via socket ${socket.id}`);
-            });
+        io.use(verifyFirebaseSocketToken);
 
-            socket.on('disconnect', () => {
-                for (let [userId, socketId] of connectedUsers.entries()) {
-                    if (socketId === socket.id) {
-                        connectedUsers.delete(userId);
-                        console.log(`❌ Utilisateur ${userId} s’est déconnecté`);
-                        break;
-                    }
-                }
-            });
+        io.on('connection', (socket) => {
+            console.log(`🔌 Client connecté : ${socket.user.uid}`);
+            socketRoutes(socket); // ⬅️ routes WS
         });
 
         server.listen(PORT, () => {

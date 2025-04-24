@@ -1,10 +1,10 @@
 const admin = require('../config/firebase');
 
-const User = require('../models/User');
-const Uid = require('../models/Uid');
-const Country = require('../models/Country');
-const Mobil = require('../models/Mobil');
-//const Card = require('../models/Card');
+const User = require('@models/User');
+const Uid = require('@models/Uid');
+const Country = require('@models/Country');
+const Mobil = require('@models/Mobil');
+//const Card = require('@models/Card');
 
 const { parsePhoneNumberFromString } = require('libphonenumber-js');
 
@@ -18,14 +18,12 @@ const getUserInfoByUUID = async (uuid) => {
 };
 
 const getTheCurrentUserOrFailed = async (req, res) => {
-    const { uid } = req.body;
-    var uidObj = await Uid.findOne({ uid: uid });
+    const { uid, infos = {} } = req.body;
+    let uidObj = await Uid.findOne({ uid: uid });
 
     let the_user = uidObj != null  ? await User.findOne({ uids: uidObj._id }) 
         .populate('country')
         .populate('phone')
-//        .populate('selectedPayementMethod')
-//        .populate('cards')
         .populate('mobils') : false;
 
     if (!the_user) {
@@ -33,21 +31,19 @@ const getTheCurrentUserOrFailed = async (req, res) => {
         if (result.status !== 200) {
             return res.status(404).json({ message: 'User not found' });
         }
-        var country = null;
-        var thetelephone = null;
+
+        let country = null;
+        let thetelephone = null;
         const phoneNumber = result.user.phoneNumber ? parsePhoneNumberFromString(result.user.phoneNumber) : false;
 
         if (phoneNumber){
             country = await Country.findOne({ code: phoneNumber.country });
             if (country){
-                const phones = await Mobil.find({ digits: phoneNumber.nationalNumber, indicatif: country.dial_code  });
+                const phones = await Mobil.find({ digits: phoneNumber.nationalNumber, indicatif: country.dial_code });
                 if (phones) {
                     for (const phone of phones) {
-                        const userWithPhone = await User.findOne({ phone: phone._id }).populate('country')
-                        .populate('phone')
-//                        .populate('selectedPayementMethod')
-//                        .populate('cards')
-                        .populate('mobils');
+                        const userWithPhone = await User.findOne({ phone: phone._id })
+                            .populate('country').populate('phone').populate('mobils');
                         if (userWithPhone) {
                             the_user = userWithPhone;
                             thetelephone = phone;
@@ -56,27 +52,21 @@ const getTheCurrentUserOrFailed = async (req, res) => {
                     }    
                 }
             }
-
-            // if (country) {
-            //     the_user.country = country._id;
-            //     the_user.phone = phoneNumber.nationalNumber;
-            // }
         }
 
         if (!the_user && result.user.email) {
             the_user = await User.findOne({ email: result.user.email })
                                 .populate('country')
                                 .populate('phone')
-//                                .populate('selectedPayementMethod')
-//                                .populate('cards')
                                 .populate('mobils');
 
             if (thetelephone){ the_user.phone = thetelephone._id; }
             else if (phoneNumber && country){
-                var userPhone = new Mobil();
-                userPhone.digits =phoneNumber.nationalNumber;
-                userPhone.indicatif =country.dial_code;
-                userPhone.title =phoneNumber.nationalNumber;
+                const userPhone = new Mobil({
+                    digits: phoneNumber.nationalNumber,
+                    indicatif: country.dial_code,
+                    title: phoneNumber.nationalNumber,
+                });
                 await userPhone.save();
                 the_user.phone = userPhone._id;
             }
@@ -86,74 +76,99 @@ const getTheCurrentUserOrFailed = async (req, res) => {
             uidObj = new Uid({ uid: uid });
             await uidObj.save();
         }
-        var imnewuser = 0;
+
+        let imnewuser = 0;
+
         if (!the_user) {
-            the_user = new User();
-            the_user.uids = [uidObj._id];
-            the_user.email = result.user.email;
-            if (result.user.displayName) { 
-                let name = result.user.displayName.split(' ');
-                the_user.name = name[0] ?? '';
-                the_user.surname = name.filter((k, v) => v != 0).toString() ?? '';
-            }
+            the_user = new User({
+                uids: [uidObj._id],
+                email: result.user.email ?? infos.email,
+                name: infos.name ?? (result.user.displayName?.split(' ')[0] ?? ''),
+                surname: infos.surname ?? (result.user.displayName?.split(' ').slice(1).join(' ') ?? ''),
+                address: infos.address,
+                country: infos.country?._id ?? (country ? country._id : null),
+                photoURL: result.user.photoURL,
+                disabled: result.user.disabled,
+                coins: 0,
+                vehicleType: infos.vehicleType,
+                marqueVehicule: infos.marqueVehicule,
+                modelVehicule: infos.modelVehicule,
+                anneeVehicule: infos.anneeVehicule,
+                nrEssieux: infos.nrEssieux,
+                capaciteCharge: infos.capaciteCharge,
+                nrImmatriculation: infos.nrImmatriculation,
+                nrAssurance: infos.nrAssurance,
+                nrChassis: infos.nrChassis,
+                nrPermis: infos.nrPermis,
+                nrVisiteTechnique: infos.nrVisiteTechnique,
+                nrCarteGrise: infos.nrCarteGrise,
+                nrContrat: infos.nrContrat,
+            });
+
             if (thetelephone){ the_user.phone = thetelephone._id; }
             else if (phoneNumber && country){
-                var userPhone = new Mobil();
-                userPhone.digits =phoneNumber.nationalNumber;
-                userPhone.indicatif =country.dial_code;
-                userPhone.title =phoneNumber.nationalNumber;
+                const userPhone = new Mobil({
+                    digits: phoneNumber.nationalNumber,
+                    indicatif: country.dial_code,
+                    title: phoneNumber.nationalNumber,
+                });
                 await userPhone.save();
                 the_user.phone = userPhone._id;
             }
-            the_user.country = country ? country._id : null;
-            the_user.photoURL = result.user.photoURL;
-            the_user.disabled = result.user.disabled;
-            the_user.coins = 1000;
+
             imnewuser = 1;
-        }
-        else{
+        } else {
             the_user.uids.push(uidObj._id);
+            const updatableFields = [
+                'address', 'vehicleType', 'marqueVehicule', 'modelVehicule', 'anneeVehicule', 'nrEssieux',
+                'capaciteCharge', 'nrImmatriculation', 'nrAssurance', 'nrChassis', 'nrPermis',
+                'nrVisiteTechnique', 'nrCarteGrise', 'nrContrat'
+            ];
+            for (const field of updatableFields) {
+                if (infos[field]) the_user[field] = infos[field];
+            }
         }
+
         await the_user.save();
 
         the_user = await User.findOne({ uids: uidObj }) 
             .populate('country')
             .populate('uids')
             .populate('phone')
-//            .populate('selectedPayementMethod')
-//            .populate('cards')
             .populate('mobils');
-            the_user.new_user =  imnewuser;
+
+        the_user.new_user = imnewuser;
     }
 
     return the_user;
-}
+};
 const generateUserResponse = async (user) => {
-//    if (user.selectedPayementMethod) {
-//        const result = await SelectedPayement.findOne({ _id: user.selectedPayementMethod._id })
-//            .populate('mobil')
-//            .populate('card');
-//
-//        if (result.mobil == null) { delete result.mobil; }
-//        if (result.card == null) { delete result.card; }
-//
-//        user.selectedPayementMethod = result;
-//    }
-
+    const fullName = [user.name, user.surname].filter(Boolean).join(' ');
+    const defaultAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName || 'User')}&background=random&size=500`;
+  
     return {
-        _id: user._id,
-        email: user.email ?? '',
-        country: user.country ? user.country : null,
-        phone: user.phone ?? null,
-        name: user.name ?? '',
-        surname: user.surname ?? '',
-        imgPath: user.photoURL ?? (user.name ? `https://ui-avatars.com/api/?name=${user.name}+${user.surname}&background=random` : 'https://ui-avatars.com/api/?size=500&background=random'),
-        coins: user.coins ?? 0,
-//        cards: user.cards,
-        mobils: user.mobils,
-        // new_user : 1,
-        new_user : user.new_user ?? 0,
+      _id: user._id,
+      email: user.email ?? '',
+      country: user.country && user.country.code ? {
+        code: user.country.code,
+        name: user.country.name
+      } : null,
+      phone: user.phone ?? null,
+      name: user.name ?? '',
+      surname: user.surname ?? '',
+      imgPath: user.photoURL || defaultAvatar,
+      coins: user.coins ?? 0,
+      mobils: user.mobils ?? [],
+      new_user: user.new_user ?? 0,
+  
+      vehicleType: user.vehicleType ?? null,
+      marqueVehicule: user.marqueVehicule ?? null,
+      modelVehicule: user.modelVehicule ?? null,
+      anneeVehicule: user.anneeVehicule ?? null,
+      nrImmatriculation: user.nrImmatriculation ?? null,
+      nrPermis: user.nrPermis ?? null,
+      nrAssurance: user.nrAssurance ?? null,
     };
-}
-
+  };
+  
 module.exports = { getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse};

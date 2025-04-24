@@ -1,1 +1,2 @@
 npm install socket.io
+npm install module-alias
