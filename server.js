@@ -4,16 +4,14 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
-const http = require('http'); // ✅ Nécessaire pour créer un serveur HTTP
+const http = require('http'); 
 const fs = require('fs').promises;
-const { Server } = require('socket.io'); // ✅ Socket.IO
+const { Server } = require('socket.io');
 const { faker } = require('@faker-js/faker');
 
 const Country = require('./models/Country');
 require('./models/User');
 require('./models/Mobil');
-// require('./models/Card');
-// require('./models/SelectedPayement');
 
 const usersRoutes = require('./routes/api');
 
@@ -52,28 +50,24 @@ mongoose.connect(process.env.MONGO_URI)
 
         console.log('✅ Importation des données terminée.');
 
-        // API Routes
         app.use('/api', usersRoutes);
 
-        // Création du serveur HTTP
         const server = http.createServer(app);
 
-        // Initialisation de Socket.IO
         const io = new Server(server, {
             cors: {
-                origin: 'http://192.168.1.128:5050', // Assurez-vous que l'origine est correcte
+                origin: '*', 
                 methods: ['GET', 'POST'],
-                allowedHeaders: ['Content-Type', 'Authorization'], // Ajoutez l'en-tête Authorization si vous l'utilisez
+                allowedHeaders: ['Content-Type', 'Authorization'],
             }
         });
 
-        // Liste des utilisateurs connectés
         const connectedUsers = new Map();
 
         io.on('connection', (socket) => {
             console.log('🧠 Un client s’est connecté via WebSocket :', socket.id);
             const token = socket.handshake.query.token;
-            console.log('Token:', token);  // Vérifiez si le token est bien reçu
+            console.log('Token:', token);
         
             socket.on('user_online', (userId) => {
                 connectedUsers.set(userId, socket.id);
@@ -91,7 +85,6 @@ mongoose.connect(process.env.MONGO_URI)
             });
         });
 
-        // Lancement du serveur HTTP
         server.listen(PORT, () => {
             console.log('📌 Modèles Mongoose chargés:', mongoose.modelNames());
             console.log(`🚀 Server running on port ${PORT}`);
