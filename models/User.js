@@ -2,16 +2,19 @@ const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema({
   uids: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Uid' }],
-  email: { type: String, required: false, unique: true },
-  name: { type: String, required: true },
+  email: { type: String, required: false, unique: false },
+  name: { type: String, required: false },
+  surname: { type: String, required: false },
+
   photoURL: { type: String, required: false },
   disabled: { type: Boolean, default: false },
-  country: { type: mongoose.Schema.Types.ObjectId, ref: 'Country', required: true },
-  city: { type: mongoose.Schema.Types.ObjectId, ref: 'City', required: true },
-  address: { type: String, required: true },
+  country: { type: mongoose.Schema.Types.ObjectId, ref: 'Country', required: false },
+  city: { type: mongoose.Schema.Types.ObjectId, ref: 'City', required: false },
+  address: { type: String, required: false },
   mobils: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Mobil' }],
+  phone: { type: mongoose.Schema.Types.ObjectId, ref: 'Mobil' },
 
-  vehicleType: { type: String, required: true },
+  vehicleType: { type: String, required: false },
   marqueVehicule: { type: String, required: false },
   modelVehicule: { type: String, required: false },
   anneeVehicule: { type: String, required: false },

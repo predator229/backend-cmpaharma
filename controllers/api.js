@@ -1,9 +1,10 @@
-const {getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse} = require('../tools/flutter_tools');
+require('module-alias/register');
+const {getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse} = require('@tools/flutter_tools');
 const { parsePhoneNumberFromString } = require('libphonenumber-js');
-const User = require('../models/User');
-const Uid = require('../models/Uid');
-const Country = require('../models/Country');
-const Mobil = require('../models/Mobil');
+const User = require('@models/User');
+const Uid = require('@models/Uid');
+const Country = require('@models/Country');
+const Mobil = require('@models/Mobil');
 
 // const stripe = require('stripe')('your-stripe-secret-key');
 // const axios = require('axios');
@@ -15,7 +16,7 @@ const authentificateUser = async (req, res) => {
             return res.status(404).json({ message: 'User not found' });
         }
         const userResponse = await generateUserResponse(the_user);
-        res.status(200).json({user: userResponse, message: the_user.new_user ? 'Bienvenu !' : 'Bon retour !' });
+        res.status(200).json({'error':0, user: userResponse, message: the_user.new_user ? 'Bienvenu !' : 'Bon retour !' });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -564,6 +565,48 @@ const editProfil = async (req, res) => {
 //        res.status(500).json({ error: error.message });
 //    }
 //};
+const registerAdditionalInfo = async (req, res) => {
+    try {
+      const { uid, ...infos } = req.body;
+  
+      const uidObj = await Uid.findOne({ uid });
+      if (!uidObj) return res.status(404).json({ message: "UID non trouvé" });
+  
+      const user = await User.findOne({ uids: uidObj._id });
+      if (!user) return res.status(404).json({ message: "Utilisateur non trouvé" });
+  
+      // Remplir les champs avec les données reçues
+      user.name = infos.name ?? user.name;
+      user.surname = infos.surname ?? user.surname;
+      user.email = infos.email ?? user.email;
+      user.address = infos.address ?? user.address;
+      user.vehicleType = infos.vehicleType ?? user.vehicleType;
+      user.marqueVehicule = infos.marqueVehicule ?? user.marqueVehicule;
+      user.modelVehicule = infos.modelVehicule ?? user.modelVehicule;
+      user.anneeVehicule = infos.anneeVehicule ?? user.anneeVehicule;
+      user.nrEssieux = infos.nrEssieux ?? user.nrEssieux;
+      user.capaciteCharge = infos.capaciteCharge ?? user.capaciteCharge;
+      user.nrImmatriculation = infos.nrImmatriculation ?? user.nrImmatriculation;
+      user.nrAssurance = infos.nrAssurance ? new Date(infos.nrAssurance) : user.nrAssurance;
+      user.nrChassis = infos.nrChassis ?? user.nrChassis;
+      user.nrPermis = infos.nrPermis ?? user.nrPermis;
+      user.nrVisiteTechnique = infos.nrVisiteTechnique ? new Date(infos.nrVisiteTechnique) : user.nrVisiteTechnique;
+      user.nrCarteGrise = infos.nrCarteGrise ?? user.nrCarteGrise;
+      user.nrContrat = infos.nrContrat ?? user.nrContrat;
+  
+      // Gestion du pays si on reçoit un objet
+      if (infos.country && infos.country.code) {
+        const country = await Country.findOne({ code: infos.country.code });
+        if (country) user.country = country._id;
+      }
+  
+      await user.save();
+      return res.status(200).json({'error':0, 'user': await generateUserResponse(user)});
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ message: "Erreur lors de l'enregistrement des infos", error: err.message });
+    }
+  };
 
 //exports
-module.exports = { authentificateUser, refreshUser, addMobil, addCard, removeMobil, editProfil, getDefaultParams };
+module.exports = { authentificateUser, refreshUser, addMobil, addCard, removeMobil, editProfil, getDefaultParams, registerAdditionalInfo };

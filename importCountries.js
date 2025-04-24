@@ -1,7 +1,7 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
 const fs = require('fs').promises;
-const Country = require('./models/Country');
+const Country = require('@models/Country');
 
 async function importData() {
     try {
