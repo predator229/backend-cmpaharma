@@ -1,35 +1,46 @@
-const admin = require('../config/firebase');
+const { getFirebaseApp } = require('@config/firebase');
 
-const User = require('@models/User');
 const Uid = require('@models/Uid');
 const Country = require('@models/Country');
 const Mobil = require('@models/Mobil');
-//const Card = require('@models/Card');
 
 const { parsePhoneNumberFromString } = require('libphonenumber-js');
+const Deliver = require('@models/Deliver');
+const Admin = require('@models/Admin');
 
-const getUserInfoByUUID = async (uuid) => {
+const getUserInfoByUUID = async (uuid, type) => {
+    const firebaseApp = getFirebaseApp(type);
+
+    if (!firebaseApp) {
+        throw new Error(`Firebase app not initialized for type: ${type}`);
+    }
+
     try {
-        const userRecord = await admin.auth().getUser(uuid);
+        const userRecord = await firebaseApp.auth().getUser(uuid);
         return { status: 200, user: userRecord };
     } catch (error) {
-        return { status: 404, message: 'User not found', error: error.message };
+        return { status: 404, message: 'User not found firebase probleme', error: error.message };
     }
 };
 
 const getTheCurrentUserOrFailed = async (req, res) => {
-    const { uid, infos = {} } = req.body;
+    const { uid, infos = {}, type = "deliver" } = req.body;
     let uidObj = await Uid.findOne({ uid: uid });
 
-    let the_user = uidObj != null  ? await User.findOne({ uids: uidObj._id }) 
+    let the_user = uidObj != null  ? (type == 'deliver' ? await Deliver.findOne({ uids: uidObj._id }) 
         .populate('country')
         .populate('phone')
-        .populate('mobils') : false;
+        .populate('mobils') : 
+        await Admin.findOne({ uids: uidObj._id }) 
+        .populate('country')
+        .populate('phone')
+        .populate('mobils')
+     ): false;
 
     if (!the_user) {
-        const result = await getUserInfoByUUID(uid);
+        const result = await getUserInfoByUUID(uid, type);
         if (result.status !== 200) {
-            return res.status(404).json({ message: 'User not found' });
+            return {error:1};
         }
 
         let country = null;
@@ -42,7 +53,8 @@ const getTheCurrentUserOrFailed = async (req, res) => {
                 const phones = await Mobil.find({ digits: phoneNumber.nationalNumber, indicatif: country.dial_code });
                 if (phones) {
                     for (const phone of phones) {
-                        const userWithPhone = await User.findOne({ phone: phone._id })
+                        const userWithPhone = type == 'deliver' ?  await Deliver.findOne({ phone: phone._id })
+                            .populate('country').populate('phone').populate('mobils') :  await Admin.findOne({ phone: phone._id })
                             .populate('country').populate('phone').populate('mobils');
                         if (userWithPhone) {
                             the_user = userWithPhone;
@@ -55,7 +67,11 @@ const getTheCurrentUserOrFailed = async (req, res) => {
         }
 
         if (!the_user && result.user.email) {
-            the_user = await User.findOne({ email: result.user.email })
+            the_user = type == 'deliver' ? await Deliver.findOne({ email: result.user.email })
+                                .populate('country')
+                                .populate('phone')
+                                .populate('mobils') : 
+                                await Admin.findOne({ email: result.user.email })
                                 .populate('country')
                                 .populate('phone')
                                 .populate('mobils');
@@ -78,9 +94,8 @@ const getTheCurrentUserOrFailed = async (req, res) => {
         }
 
         let imnewuser = 0;
-
         if (!the_user) {
-            the_user = new User({
+            the_user = type == 'deliver' ? new Deliver({
                 uids: [uidObj._id],
                 email: result.user.email ?? infos.email,
                 name: infos.name ?? (result.user.displayName?.split(' ')[0] ?? ''),
@@ -103,6 +118,19 @@ const getTheCurrentUserOrFailed = async (req, res) => {
                 nrVisiteTechnique: infos.nrVisiteTechnique,
                 nrCarteGrise: infos.nrCarteGrise,
                 nrContrat: infos.nrContrat,
+            }) : new Admin({
+                uids: [uidObj._id],
+                email: result.user.email ?? infos.email,
+                name: infos.name ?? (result.user.displayName?.split(' ')[0] ?? ''),
+                surname: infos.surname ?? (result.user.displayName?.split(' ').slice(1).join(' ') ?? ''),
+                address: infos.address,
+                country: infos.country?._id ?? (country ? country._id : null),
+                photoURL: result.user.photoURL,
+                disabled: result.user.disabled,
+                role: 'manager',
+                permissions : ['read'] ,
+                isActivated: false,
+                lastLogin: Date(),
             });
 
             if (thetelephone){ the_user.phone = thetelephone._id; }
@@ -112,40 +140,53 @@ const getTheCurrentUserOrFailed = async (req, res) => {
                     indicatif: country.dial_code,
                     title: phoneNumber.nationalNumber,
                 });
-                await userPhone.save();
+                type == 'deliver' ? await User.save(the_user) : await Admin.save(the_user);
                 the_user.phone = userPhone._id;
             }
 
             imnewuser = 1;
         } else {
-            the_user.uids.push(uidObj._id);
+            // return {user : the_user};
+            if (!the_user.uids.includes(uidObj._id)) {
+                the_user.uids.push(uidObj._id);
+            }
             const updatableFields = [
                 'address', 'vehicleType', 'marqueVehicule', 'modelVehicule', 'anneeVehicule', 'nrEssieux',
                 'capaciteCharge', 'nrImmatriculation', 'nrAssurance', 'nrChassis', 'nrPermis',
                 'nrVisiteTechnique', 'nrCarteGrise', 'nrContrat'
             ];
-            for (const field of updatableFields) {
-                if (infos[field]) the_user[field] = infos[field];
+            if (type =='deliver'){
+                for (const field of updatableFields) {
+                    if (infos[field]) the_user[field] = infos[field];
+                }    
             }
         }
 
         await the_user.save();
 
-        the_user = await User.findOne({ uids: uidObj }) 
+        the_user = type == 'deliver' 
+        ?  await Deliver.findOne({ uids: uidObj }) 
             .populate('country')
             .populate('uids')
             .populate('phone')
-            .populate('mobils');
+            .populate('mobils') 
+        :  await Admin.findOne({ uids: uidObj }) 
+            .populate('country')
+            .populate('uids')
+            .populate('phone')
+            .populate('mobils') 
+            ;
 
         the_user.new_user = imnewuser;
     }
 
-    return the_user;
+    return {error : 0, the_user:the_user, status:200};
 };
 const generateUserResponse = async (user) => {
-    const fullName = [user.name, user.surname].filter(Boolean).join(' ');
-    const defaultAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName || 'User')}&background=random&size=500`;
-  
+
+    user.fullName = [user.name ?? '', user.surname ?? ''].filter(Boolean).join(' ');
+    user.defaultAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.fullName || 'User')}&background=random&size=500`;
+
     return {
       _id: user._id,
       email: user.email ?? '',
@@ -156,7 +197,7 @@ const generateUserResponse = async (user) => {
       phone: user.phone ?? null,
       name: user.name ?? '',
       surname: user.surname ?? '',
-      imgPath: user.photoURL || defaultAvatar,
+      imgPath: user.photoURL || user.defaultAvatar,
       coins: user.coins ?? 0,
       mobils: user.mobils ?? [],
       new_user: user.new_user ?? 0,

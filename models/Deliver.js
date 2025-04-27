@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const userSchema = new mongoose.Schema({
+const deliverSchema = new mongoose.Schema({
   uids: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Uid' }],
   email: { type: String, required: false, unique: false },
   name: { type: String, required: false },
@@ -27,9 +27,10 @@ const userSchema = new mongoose.Schema({
   nrVisiteTechnique: { type: Date, required: false },
   nrCarteGrise: { type: String, required: false },
   nrContrat: { type: String, required: false },
+  isActivated: { type: Boolean, default: false },
 
   coins: { type: Number, default: 0 },
 
 }, { timestamps: true });
 
-module.exports = mongoose.model('User', userSchema);
+module.exports = mongoose.model('Deliver', deliverSchema);
