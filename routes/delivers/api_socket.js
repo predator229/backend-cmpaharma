@@ -1,6 +1,8 @@
 require('module-alias/register');
-const { authentificateUser, refreshUser, addMobil, addCard, removeMobil, editProfil, getDefaultParams,} = require('@controllers/api');
-  
+const { authentificateUser, refreshUser, addMobil, addCard, removeMobil, editProfil, getDefaultParams,} = require('@controllers/delivers/api');
+// const { createAuthMiddleware } = require('@middlewares/auth');
+// const { injectDeliverType } = createAuthMiddleware('admin');
+
 const connectedUsers = new Map(); 
   
   module.exports = (socket) => {

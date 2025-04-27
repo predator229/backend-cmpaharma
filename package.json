@@ -34,7 +34,8 @@
   "@controllers": "controllers",
   "@routes": "routes",
   "@config": "config",
-  "@tools" : "tools"
+  "@tools" : "tools",
+  "@firebase_files" : "config/authentificate_files"
 }
 
 }

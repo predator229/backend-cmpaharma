@@ -1,44 +1,56 @@
+// auth.js - middleware modifié
 require('module-alias/register');
-const admin = require('@config/firebase');
-const { socket } = require('socket.io');
+const { getFirebaseApp } = require('@config/firebase');
 
+const createAuthMiddleware = (type) => {
+    const firebaseApp = getFirebaseApp(type);
 
-// Middleware pour vérifier le token Firebase dans les requêtes HTTP classiques
-const verifyFirebaseToken = async (req, res, next) => {
-    const token = req.headers.authorization?.split(' ')[1];
-
-    if (!token) {
-        return res.status(403).json({ message: 'Token manquant' });
+    if (!firebaseApp) {
+        throw new Error(`Firebase app not initialized for type: ${type}`);
     }
 
-    try {
-        const decodedToken = await admin.auth().verifyIdToken(token);
-        req.user = decodedToken;
-        next(); 
-    } catch (error) {
-        console.error("⚠️ Erreur d'authentification HTTP :", error.message);
-        res.status(401).json({ message: 'Token invalide', error: error.message });
-    }
-};
+    const verifyFirebaseToken = async (req, res, next) => {
+        const token = req.headers.authorization?.split(' ')[1];
+        if (!token) {
+            return res.status(403).json({ message: 'Token manquant' });
+        }
+        try {
+            const decodedToken = await firebaseApp.auth().verifyIdToken(token);
+            req.user = decodedToken;
+            console.log(`[${type.toUpperCase()}] Auth HTTP OK pour ${decodedToken.uid}`);
+            next(); 
+        } catch (error) {
+            console.error(`[${type.toUpperCase()}] ❌ Erreur HTTP auth:`, error.message);
+            res.status(401).json({ message: 'Token invalide',  }); //error: error.message
+        }
+    };
 
-// Middleware pour vérifier le token Firebase dans la connexion WebSocket
-const verifyFirebaseSocketToken = async (socket, next) => {
-    const token = socket.handshake.auth?.token;
-
-    if (!token) {
-        console.error("❌ Token manquant dans la connexion WebSocket");
-        return next(new Error("Token manquant"));
-    }
-
-    try {
-        const decodedToken = await admin.auth().verifyIdToken(token);
-        socket.user = decodedToken;
-        console.log(`✅ Authentification réussie pour ${socket.user.uid}`);
+    const  injectDeliverType = (req, res, next) => {
+        req.body.type = type;
         next();
-    } catch (error) {
-        console.error("⚠️ Erreur d'authentification WebSocket :", error.message);
-        next(new Error("Token invalide"));
-    }
+    }    
+
+    const verifyFirebaseSocketToken = async (socket, next) => {
+        const token = socket.handshake?.auth?.token || socket.handshake?.query?.token;
+        
+        if (!token) {
+            console.error(`[${type.toUpperCase()}] ❌ Token manquant dans la connexion WebSocket`);
+            return next(new Error("Token manquant"));
+        }
+    
+        try {
+            // Utiliser firebaseApp au lieu de admin (correction de l'erreur)
+            const decodedToken = await firebaseApp.auth().verifyIdToken(token);
+            socket.user = decodedToken;
+            console.log(`[${type.toUpperCase()}] ✅ Authentification WebSocket réussie pour ${decodedToken.uid}`);
+            next();
+        } catch (error) {
+            console.error(`[${type.toUpperCase()}] ⚠️ Erreur d'authentification WebSocket:`, error.message);
+            next(new Error("Token invalide"));
+        }
+    };
+            
+    return { verifyFirebaseToken, verifyFirebaseSocketToken, injectDeliverType };
 };
 
-module.exports = { verifyFirebaseToken, verifyFirebaseSocketToken };
+module.exports = { createAuthMiddleware };
