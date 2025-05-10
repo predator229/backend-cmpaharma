@@ -14,16 +14,15 @@ const adminSchema = new mongoose.Schema({
   mobils: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Mobil' }],
   phone: { type: mongoose.Schema.Types.ObjectId, ref: 'Mobil' },
 
-  // Gestion des pharmacies
-  pharmaciesManaged: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Pharmacy', required: false }],  // Liste des pharmacies gérées par l'administrateur
+  // pharmaciesManaged: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Pharmacy', required: false }],
 
-  // Rôles et permissions
-  role: { type: String, enum: ['superadmin', 'admin', 'manager', 'pharmacist-owner', 'pharmacits-manager'], required: true, default: 'admin' },  // Rôle de l'administrateur
+  role: { type: String, enum: ['superadmin', 'admin', 'manager', 'pharmacist-owner', 'pharmacits-manager'], required: true, default: 'admin' },
   permissions: { 
     type: [String], 
     enum: ['read', 'write', 'delete', 'update'], 
     default: ['read', 'write'] 
   }, 
+  setups: { type: mongoose.Schema.Types.ObjectId, ref: 'SetupBase', required: true },
 
   isActivated: { type: Boolean, default: true },
   lastLogin: { type: Date, default: null },
