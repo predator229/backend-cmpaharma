@@ -222,12 +222,10 @@ const generateProduct = () => {
   };
 async function importData() {
     try {
-        // if (process.env.NODE_ENV !== 'production') {
             console.log('🗑️ Suppression de toutes les collections...');
             const collections = await mongoose.connection.db.listCollections().toArray();
             for (let collection of collections) {
                 await mongoose.connection.db.collection(collection.name).deleteMany({});
-            }
 
             const ok = await loadModels(path.join(__dirname, 'models'));
             if (ok) {
@@ -241,18 +239,18 @@ async function importData() {
             } else {
                 console.error('❌ Les modèles n\'ont pas pu être chargés.');
             }
-        // }
+        }
 
     } catch (error) {
         console.error('❌ Error:', error);
-        process.exit(1);
+        // process.exit(1);
     }
 }
 
 async function loadModels(directory) {
     const models = {};
     try {
-        const files = await fs.readdir(directory); // Lire le répertoire de manière asynchrone
+        const files = await fs.readdir(directory);
 
         for (const file of files) {
             const filePath = path.join(directory, file);
@@ -272,12 +270,15 @@ async function loadModels(directory) {
     }
 }
 
-mongoose.connect(process.env.MONGO_URI)
+const connectWithRetry = () => {
+  console.log('🟡 Tentative de connexion MongoDB...');
+  mongoose.connect(process.env.MONGO_URI)
     .then(async () => {
         console.log('✅ MongoDB connecté avec succès');
-        // await importData();  // Appel de l'importation des données et du chargement des modèles
-        console.log('✅ Importation des données terminée.');
-
+        if (process.env.NODE_ENV !== 'production') {
+          await importData();  // Appel de l'importation des données et du chargement des modèles
+          console.log('✅ Importation des données terminée.');
+        }
         app.use('/deliver/api', deliverRoutes);
         app.use('/admin/api', adminRoutes);
 
@@ -309,5 +310,9 @@ mongoose.connect(process.env.MONGO_URI)
     })
     .catch(err => {
         console.error('❌ Erreur de connexion MongoDB :', err);
-        process.exit(1);
+    setTimeout(connectWithRetry, 5000);
+        // process.exit(1);
     });
+  }
+  connectWithRetry();
+
