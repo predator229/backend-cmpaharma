@@ -1,3 +1,4 @@
+require('dotenv').config();
 const { getFirebaseApp } = require('@config/firebase');
 
 const Uid = require('@models/Uid');
@@ -41,151 +42,153 @@ const getTheCurrentUserOrFailed = async (req, res) => {
      ): false;
 
      //to use after to save new user
-    // if (!the_user) {
-    //     const result = await getUserInfoByUUID(uid, type);
-    //     if (result.status !== 200) {
-    //         return {error:1};
-    //     }
+    if (!the_user && process.env.NODE_ENV !== 'production') {
 
-    //     let country = null;
-    //     let thetelephone = null;
-    //     const phoneNumber = result.user.phoneNumber ? parsePhoneNumberFromString(result.user.phoneNumber) : false;
+        const result = await getUserInfoByUUID(uid, type);
+        if (result.status !== 200) {
+            return {error:1};
+        }
 
-    //     if (phoneNumber){
-    //         country = await Country.findOne({ code: phoneNumber.country });
-    //         if (country){
-    //             const phones = await Mobil.find({ digits: phoneNumber.nationalNumber, indicatif: country.dial_code });
-    //             if (phones) {
-    //                 for (const phone of phones) {
-    //                     const userWithPhone = type == 'deliver' ?  await Deliver.findOne({ phone: phone._id })
-    //                         .populate('country').populate('phone').populate('mobils') :  await Admin.findOne({ phone: phone._id })
-    //                         .populate('country').populate('phone').populate('mobils').populate('setups').populate('pharmaciesManaged')
-    //                         ;
-    //                     if (userWithPhone) {
-    //                         the_user = userWithPhone;
-    //                         thetelephone = phone;
-    //                         break;
-    //                     }
-    //                 }    
-    //             }
-    //         }
-    //     }
+        let country = null;
+        let thetelephone = null;
+        const phoneNumber = result.user.phoneNumber ? parsePhoneNumberFromString(result.user.phoneNumber) : false;
 
-    //     if (!the_user && result.user.email) {
-    //         the_user = type == 'deliver' ? await Deliver.findOne({ email: result.user.email })
-    //                             .populate('country')
-    //                             .populate('phone')
-    //                             .populate('mobils') : 
-    //                             await Admin.findOne({ email: result.user.email })
-    //                             .populate('country')
-    //                             .populate('phone')
-    //                             .populate('mobils')
-    //                             .populate('setups').populate('pharmaciesManaged');
+        if (phoneNumber){
+            country = await Country.findOne({ code: phoneNumber.country });
+            if (country){
+                const phones = await Mobil.find({ digits: phoneNumber.nationalNumber, indicatif: country.dial_code });
+                if (phones) {
+                    for (const phone of phones) {
+                        const userWithPhone = type == 'deliver' ?  await Deliver.findOne({ phone: phone._id })
+                            .populate('country').populate('phone').populate('mobils') :  await Admin.findOne({ phone: phone._id })
+                            .populate('country').populate('phone').populate('mobils').populate('setups').populate('pharmaciesManaged')
+                            ;
+                        if (userWithPhone) {
+                            the_user = userWithPhone;
+                            thetelephone = phone;
+                            break;
+                        }
+                    }    
+                }
+            }
+        }
 
-    //         if (thetelephone){ the_user.phone = thetelephone._id; }
-    //         else if (phoneNumber && country){
-    //             const userPhone = new Mobil({
-    //                 digits: phoneNumber.nationalNumber,
-    //                 indicatif: country.dial_code,
-    //                 title: phoneNumber.nationalNumber,
-    //             });
-    //             await userPhone.save();
-    //             the_user.phone = userPhone._id;
-    //         }
-    //     }
+        if (!the_user && result.user.email) {
+            the_user = type == 'deliver' ? await Deliver.findOne({ email: result.user.email })
+                                .populate('country')
+                                .populate('phone')
+                                .populate('mobils') : 
+                                await Admin.findOne({ email: result.user.email })
+                                .populate('country')
+                                .populate('phone')
+                                .populate('mobils')
+                                .populate('setups').populate('pharmaciesManaged');
 
-    //     if (!uidObj){
-    //         uidObj = new Uid({ uid: uid });
-    //         await uidObj.save();
-    //     }
+            if (thetelephone){ the_user.phone = thetelephone._id; }
+            else if (phoneNumber && country){
+                const userPhone = new Mobil({
+                    digits: phoneNumber.nationalNumber,
+                    indicatif: country.dial_code,
+                    title: phoneNumber.nationalNumber,
+                });
+                await userPhone.save();
+                the_user.phone = userPhone._id;
+            }
+        }
 
-    //     if (!the_user) {
-    //         if (type != 'deliver'){
-    //             const setups_base = new SetupBase({
-    //                 font_family: 'Poppins',
-    //                 font_size: 14,
-    //                 theme: 'light',
-    //                 isCollapse_menu: true,
-    //             });
-    //             await setups_base.save();
-    //             setups_base.id = setups_base._id;
-    //             await setups_base.save();
+        if (!uidObj){
+            uidObj = new Uid({ uid: uid });
+            await uidObj.save();
+        }
 
-    //             the_user = new Admin({
-    //                 uids: [uidObj._id],
-    //                 email: result.user.email ?? infos.email,
-    //                 name: infos.name ?? (result.user.displayName?.split(' ')[0] ?? ''),
-    //                 surname: infos.surname ?? (result.user.displayName?.split(' ').slice(1).join(' ') ?? ''),
-    //                 address: infos.address,
-    //                 country: infos.country?._id ?? (country ? country._id : null),
-    //                 photoURL: result.user.photoURL,
-    //                 disabled: result.user.disabled,
-    //                 role: 'manager',
-    //                 permissions : ['read'] ,
-    //                 isActivated: false,
-    //                 lastLogin: Date(),
-    //                 setups: setups_base._id,
-    //                 pharmaciesManaged: [],
-    //                 coins: 0,
-    //             });
-    //         }else{
-    //             the_user = new Deliver({
-    //                 uids: [uidObj._id],
-    //                 email: result.user.email ?? infos.email,
-    //                 name: infos.name ?? (result.user.displayName?.split(' ')[0] ?? ''),
-    //                 surname: infos.surname ?? (result.user.displayName?.split(' ').slice(1).join(' ') ?? ''),
-    //                 address: infos.address,
-    //                 country: infos.country?._id ?? (country ? country._id : null),
-    //                 photoURL: result.user.photoURL,
-    //                 disabled: result.user.disabled,
-    //                 coins: 0,
-    //                 vehicleType: infos.vehicleType,
-    //                 marqueVehicule: infos.marqueVehicule,
-    //                 modelVehicule: infos.modelVehicule,
-    //                 anneeVehicule: infos.anneeVehicule,
-    //                 nrEssieux: infos.nrEssieux,
-    //                 capaciteCharge: infos.capaciteCharge,
-    //                 nrImmatriculation: infos.nrImmatriculation,
-    //                 nrAssurance: infos.nrAssurance,
-    //                 nrChassis: infos.nrChassis,
-    //                 nrPermis: infos.nrPermis,
-    //                 nrVisiteTechnique: infos.nrVisiteTechnique,
-    //                 nrCarteGrise: infos.nrCarteGrise,
-    //                 nrContrat: infos.nrContrat,
-    //             });
-    //         }
+        if (!the_user) {
+            if (type != 'deliver'){
+                const setups_base = new SetupBase({
+                    font_family: 'Poppins',
+                    font_size: 14,
+                    theme: 'light',
+                    isCollapse_menu: true,
+                });
+                await setups_base.save();
+                setups_base.id = setups_base._id;
+                await setups_base.save();
+
+                the_user = new Admin({
+                    uids: [uidObj._id],
+                    email: result.user.email ?? infos.email,
+                    name: infos.name ?? (result.user.displayName?.split(' ')[0] ?? ''),
+                    surname: infos.surname ?? (result.user.displayName?.split(' ').slice(1).join(' ') ?? ''),
+                    address: infos.address,
+                    country: infos.country?._id ?? (country ? country._id : null),
+                    photoURL: result.user.photoURL,
+                    disabled: result.user.disabled,
+                    role: 'manager',
+                    permissions : ['read'] ,
+                    isActivated: false,
+                    lastLogin: Date(),
+                    setups: setups_base._id,
+                    pharmaciesManaged: [],
+                    coins: 0,
+                });
+            }else{
+                the_user = new Deliver({
+                    uids: [uidObj._id],
+                    email: result.user.email ?? infos.email,
+                    name: infos.name ?? (result.user.displayName?.split(' ')[0] ?? ''),
+                    surname: infos.surname ?? (result.user.displayName?.split(' ').slice(1).join(' ') ?? ''),
+                    address: infos.address,
+                    country: infos.country?._id ?? (country ? country._id : null),
+                    photoURL: result.user.photoURL,
+                    disabled: result.user.disabled,
+                    coins: 0,
+                    vehicleType: infos.vehicleType,
+                    marqueVehicule: infos.marqueVehicule,
+                    modelVehicule: infos.modelVehicule,
+                    anneeVehicule: infos.anneeVehicule,
+                    nrEssieux: infos.nrEssieux,
+                    capaciteCharge: infos.capaciteCharge,
+                    nrImmatriculation: infos.nrImmatriculation,
+                    nrAssurance: infos.nrAssurance,
+                    nrChassis: infos.nrChassis,
+                    nrPermis: infos.nrPermis,
+                    nrVisiteTechnique: infos.nrVisiteTechnique,
+                    nrCarteGrise: infos.nrCarteGrise,
+                    nrContrat: infos.nrContrat,
+                });
+            }
             
 
-    //         if (thetelephone){ the_user.phone = thetelephone._id; }
-    //         else if (phoneNumber && country){
-    //             const userPhone = new Mobil({
-    //                 digits: phoneNumber.nationalNumber,
-    //                 indicatif: country.dial_code,
-    //                 title: phoneNumber.nationalNumber,
-    //             });
-    //             type == 'deliver' ? await User.save(the_user) : await Admin.save(the_user);
-    //             the_user.phone = userPhone._id;
-    //         }
-    //         imnewuser = 1;
-    //         await the_user.save();
-    //     } else {
-    //         if ( uidObj && !the_user.uids.includes(uidObj._id)) {
-    //             the_user.uids.push(uidObj._id);
-    //             await the_user.save();
-    //         }
-    //     }
-    //     if (type =='deliver' && the_user && infos) {
-    //         const updatableFields = [
-    //             'address', 'vehicleType', 'marqueVehicule', 'modelVehicule', 'anneeVehicule', 'nrEssieux',
-    //             'capaciteCharge', 'nrImmatriculation', 'nrAssurance', 'nrChassis', 'nrPermis',
-    //             'nrVisiteTechnique', 'nrCarteGrise', 'nrContrat'
-    //         ];
-    //         for (const field of updatableFields) {
-    //             if (infos[field]) the_user[field] = infos[field];
-    //         }    
-    //         await the_user.save();
-    //     }
-    // }
+            if (thetelephone){ the_user.phone = thetelephone._id; }
+            else if (phoneNumber && country){
+                const userPhone = new Mobil({
+                    digits: phoneNumber.nationalNumber,
+                    indicatif: country.dial_code,
+                    title: phoneNumber.nationalNumber,
+                });
+                type == 'deliver' ? await User.save(the_user) : await Admin.save(the_user);
+                the_user.phone = userPhone._id;
+            }
+            imnewuser = 1;
+            await the_user.save();
+        } else {
+            if ( uidObj && !the_user.uids.includes(uidObj._id)) {
+                the_user.uids.push(uidObj._id);
+                await the_user.save();
+            }
+        }
+        if (type =='deliver' && the_user && infos) {
+            const updatableFields = [
+                'address', 'vehicleType', 'marqueVehicule', 'modelVehicule', 'anneeVehicule', 'nrEssieux',
+                'capaciteCharge', 'nrImmatriculation', 'nrAssurance', 'nrChassis', 'nrPermis',
+                'nrVisiteTechnique', 'nrCarteGrise', 'nrContrat'
+            ];
+            for (const field of updatableFields) {
+                if (infos[field]) the_user[field] = infos[field];
+            }    
+            await the_user.save();
+        }
+    }
+  
 
     return {error : the_user ? 0 : 1, the_user:the_user, status:200};
 };
