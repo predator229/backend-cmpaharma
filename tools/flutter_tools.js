@@ -40,7 +40,6 @@ const getTheCurrentUserOrFailed = async (req, res) => {
         .populate('setups')
         // .populate('pharmaciesManaged')
      ): false;
-     //dam,oienm
 
      //to use after to save new user
     if (!the_user && process.env.NODE_ENV !== 'production') {
