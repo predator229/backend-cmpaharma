@@ -8,6 +8,7 @@ const Deliver = require('@models/Deliver');
 const Admin = require('@models/Admin');
 const SetupBase = require('../../models/SetupBase');
 const Pharmacy = require('@models/Pharmacy');
+const Activity = require('@models/Activity');
 
 const authentificateUser = async (req, res) => {
     try {
@@ -51,7 +52,12 @@ const loadGeneralsInfo = async (req, res) => {
             ];
         }
 
+        // const ordersPharmaciesCount= 0;
         //nbr users + pharmacies
+        // const allPharmacies = await Pharmacy.find({});
+        // for (const pharmacy of allPharmacies) {
+        //     if (pharmacy.orders) { ordersPharmaciesCount += pharmacy.orders.length; }
+        // }
         const pharmaciesCount = await Pharmacy.countDocuments(query);
         const adminCount = await Admin.countDocuments();
         const deliverCount = await Deliver.countDocuments();
@@ -121,43 +127,82 @@ const loadGeneralsInfo = async (req, res) => {
         }
         else { percentIncreasePharmacies = 100; }
 
-        data = [
-            {
-                name : 'Pharmacies',
-                type: percentIncreasePharmacies ? 1 : 0,
-                total: pharmaciesCount,
-                difference: percentIncreasePharmacies,
-                color: 'bg-success',
-                icon: 'fa fa-clinic-medical',
-                divicon: 'pharmacy-icon',
-                peperiod: pharmaciesCurrentPeriod,
-            },
-            {
-                name : 'Commandes',
-                type: 1,
-                total: 0,
-                difference: '0',
-                icon: 'fa fa-shopping-cart',
-                divicon: 'order-icon',
-            },
-            {
-                name : 'Revenus plateforme',
-                type: 1,
-                total: 0,
-                difference: '0',
-                icon: 'fa fa-euro-sign',
-                divicon: 'revenue-icon',
-            },
-            {
-                name : 'Utilisateurs',
-                type: percentIncreaseUser ? 1 : 0,
-                difference: percentIncreaseUser,
-                total: totalUser,
-                icon: 'fa fa-user',
-                divicon: 'user-icon',
-                peperiod: totalCurrentPeriod,
-            }
-        ];
+        // Récupérer les 10 dernières activités (toutes admins confondues), triées par date décroissante
+        const recentActivities = await Activity.find({})
+            .sort({ "created_at.date": -1 })
+            .limit(5);
+
+        const recentPharmacies = await Pharmacy.find({})
+            .sort({ "created_at.date": -1 })
+            .limit(5);
+
+        data = {
+            global_infos : [
+                {
+                    name : 'Pharmacies',
+                    type: percentIncreasePharmacies ? 1 : 0,
+                    total: pharmaciesCount,
+                    difference: percentIncreasePharmacies,
+                    color: 'bg-success',
+                    icon: 'fa fa-clinic-medical',
+                    divicon: 'pharmacy-icon',
+                    peperiod: pharmaciesCurrentPeriod,
+                },
+                {
+                    name : 'Commandes',
+                    type: 1,
+                    total: 0,
+                    difference: '0',
+                    icon: 'fa fa-shopping-cart',
+                    divicon: 'order-icon',
+                },
+                {
+                    name : 'Revenus plateforme',
+                    type: 1,
+                    total: 0,
+                    difference: '0',
+                    icon: 'fa fa-euro-sign',
+                    divicon: 'revenue-icon',
+                },
+                {
+                    name : 'Utilisateurs',
+                    type: percentIncreaseUser ? 1 : 0,
+                    difference: percentIncreaseUser,
+                    total: totalUser,
+                    icon: 'fa fa-user',
+                    divicon: 'user-icon',
+                    peperiod: totalCurrentPeriod,
+                }
+            ],
+            recent_activities: recentActivities,
+            recent_pharmacies: recentPharmacies,
+        };
+
+        return res.status(200).json({'error':0, user: user, data: data });
+
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+};
+const loadAllActivities = async (req, res) => {
+    try {
+        const { status, region, search, thisPeriod } = req.body;
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+
+        if (the_admin.error ) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        user = the_admin.the_user;
+        user.photoURL =  user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        // Récupérer les x dernières activités (toutes admins confondues), triées par date décroissante
+        const recentActivities = await Activity.find({})
+            .sort({ "created_at.date": -1 })
+            .limit(thisPeriod  ? parseInt(thisPeriod) :  50);
+
+        data = {
+            recent_activities: recentActivities,
+        };
 
         return res.status(200).json({'error':0, user: user, data: data });
 
@@ -500,4 +545,4 @@ const pharmacieDocumentsDownload = async (req, res) => {
     }
 };
 //exports
-module.exports = { authentificateUser, setProfilInfo, loadGeneralsInfo, setSettingsFont, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload };
+module.exports = { authentificateUser, setProfilInfo, loadGeneralsInfo, loadAllActivities, setSettingsFont, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload };

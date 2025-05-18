@@ -3,7 +3,7 @@ const express = require('express');
 const { createAuthMiddleware } = require('@middlewares/auth');
 
 const { verifyFirebaseToken: deliververifyFirebaseToken, injectDeliverType } = createAuthMiddleware('admin');
-const { authentificateUser, setProfilInfo, loadGeneralsInfo, setSettingsFont, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload} = require('@controllers/admins/api');
+const { authentificateUser, setProfilInfo, loadGeneralsInfo, setSettingsFont, loadAllActivities, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload} = require('@controllers/admins/api');
 
 const router = express.Router();
 router.use(injectDeliverType);
@@ -15,6 +15,7 @@ router.post('/users/set-profil-info', deliververifyFirebaseToken, setProfilInfo)
 router.post('/users/set-setings-font', deliververifyFirebaseToken, setSettingsFont);
 
 router.post('/managers/dashboard', deliververifyFirebaseToken, loadGeneralsInfo);
+router.post('/managers/dashboard/activities', deliververifyFirebaseToken, loadAllActivities);
 
 router.post('/managers/pharmacies/list', deliververifyFirebaseToken, pharmacieList);
 router.post('/managers/pharmacies/details', deliververifyFirebaseToken, pharmacieDetails);
