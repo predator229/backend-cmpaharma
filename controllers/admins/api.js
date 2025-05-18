@@ -94,7 +94,17 @@ const loadGeneralsInfo = async (req, res) => {
             break;
         }
 
-        //users pourcentage
+        // Pourcentage = (total de la période précédente) / (total de la période actuelle) * 100
+
+        // Utilisateurs
+        const adminCurrentPeriod = await Admin.countDocuments({
+            createdAt: { $gte: endPeriod }
+        });
+        const deliverCurrentPeriod = await Deliver.countDocuments({
+            createdAt: { $gte: endPeriod }
+        });
+        const totalCurrentPeriod = adminCurrentPeriod + deliverCurrentPeriod;
+
         const adminLastPeriod = await Admin.countDocuments({
             createdAt: { $gte: startPeriod, $lt: endPeriod }
         });
@@ -104,16 +114,26 @@ const loadGeneralsInfo = async (req, res) => {
         const totalLastPeriod = adminLastPeriod + deliverLastPeriod;
 
         let percentIncreaseUser = 0;
-        if (totalLastPeriod > 0) { percentIncreaseUser = ((totalUser - totalLastPeriod) / totalLastPeriod) * 100; }
-        else { percentIncreaseUser = 100; }
+        if (totalCurrentPeriod > 0) {
+            percentIncreaseUser = (totalLastPeriod / totalCurrentPeriod) * 100;
+        } else {
+            percentIncreaseUser = 0;
+        }
 
-        //pharmacies pourcentage
+        // Pharmacies
+        const pharmaciesCurrentPeriod = await Pharmacy.countDocuments({
+            createdAt: { $gte: endPeriod }
+        });
         const pharmaciesLastPeriod = await Pharmacy.countDocuments({
             createdAt: { $gte: startPeriod, $lt: endPeriod }
         });
+
         let percentIncreasePharmacies = 0;
-        if (pharmaciesLastPeriod > 0) { percentIncreasePharmacies = ((pharmaciesCount - pharmaciesLastPeriod) / pharmaciesLastPeriod) * 100; }
-        else { percentIncreasePharmacies = 100; }
+        if (pharmaciesCurrentPeriod > 0) {
+            percentIncreasePharmacies = (pharmaciesLastPeriod / pharmaciesCurrentPeriod) * 100;
+        } else {
+            percentIncreasePharmacies = 0;
+        }
 
         data = [
             {
@@ -124,6 +144,7 @@ const loadGeneralsInfo = async (req, res) => {
                 color: 'bg-success',
                 icon: 'fa fa-clinic-medical',
                 divicon: 'pharmacy-icon',
+                peperiod: pharmaciesCurrentPeriod,
             },
             {
                 name : 'Commandes',
@@ -146,9 +167,9 @@ const loadGeneralsInfo = async (req, res) => {
                 type: percentIncreaseUser ? 1 : 0,
                 difference: percentIncreaseUser,
                 total: totalUser,
-                // color: percentIncreaseUser >= 0 ? 'bg-success' : 'bg-danger',
                 icon: 'fa fa-user',
                 divicon: 'user-icon',
+                peperiod: totalCurrentPeriod,
             }
         ];
 
