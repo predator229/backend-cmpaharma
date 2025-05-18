@@ -27,7 +27,7 @@ const authentificateUser = async (req, res) => {
 };
 const loadGeneralsInfo = async (req, res) => {
     try {
-        const { status, region, search, period } = req.body;
+        const { status, region, search, thisPeriod } = req.body;
         var the_admin = await getTheCurrentUserOrFailed(req, res);
 
         if (the_admin.error ) {
@@ -62,7 +62,7 @@ const loadGeneralsInfo = async (req, res) => {
         const now = new Date();
         // const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
         let startPeriod, endPeriod;
-        switch (parseInt(period) || 1) {
+        switch (parseInt(thisPeriod) || 1) {
             case 2: // année dernière
             startPeriod = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
             endPeriod = new Date(now.getFullYear(), now.getMonth(), now.getDate());
