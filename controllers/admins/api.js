@@ -71,10 +71,10 @@ const loadGeneralsInfo = async (req, res) => {
             {
                 const dayOfWeek = now.getDay() || 7; // 1 (lundi) - 7 (dimanche)
                 const lastWeekStart = new Date(now);
-                lastWeekStart.setDate(now.getDate() - dayOfWeek - 6);
+                lastWeekStart.setDate(now.getDate() - dayOfWeek - 7);
                 lastWeekStart.setHours(0,0,0,0);
                 const lastWeekEnd = new Date(now);
-                lastWeekEnd.setDate(now.getDate() - dayOfWeek + 1);
+                lastWeekEnd.setDate(now.getDate() - dayOfWeek );
                 lastWeekEnd.setHours(0,0,0,0);
                 startPeriod = lastWeekStart;
                 endPeriod = lastWeekEnd;
@@ -82,35 +82,25 @@ const loadGeneralsInfo = async (req, res) => {
             break;
             case 4: // jour précédent
             startPeriod = new Date(now);
-            startPeriod.setDate(now.getDate() - 1);
+            startPeriod.setDate(now.getDate() - 2);
             startPeriod.setHours(0,0,0,0);
             endPeriod = new Date(now);
             endPeriod.setHours(0,0,0,0);
             break;
             case 1: // mois dernier (défaut)
             default:
-            startPeriod = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            startPeriod = new Date(now.getFullYear(), now.getMonth() - 2, 1);
             endPeriod = new Date(now.getFullYear(), now.getMonth(), 1);
             break;
         }
 
-        // Pourcentage = (total de la période précédente) / (total de la période actuelle) * 100
-
         // Utilisateurs
-        const adminCurrentPeriod = await Admin.countDocuments({
-            createdAt: { $gte: endPeriod }
-        });
-        const deliverCurrentPeriod = await Deliver.countDocuments({
-            createdAt: { $gte: endPeriod }
-        });
+        const adminCurrentPeriod = await Admin.countDocuments({createdAt: { $gte: endPeriod }});
+        const deliverCurrentPeriod = await Deliver.countDocuments({createdAt: { $gte: endPeriod }});
         const totalCurrentPeriod = adminCurrentPeriod + deliverCurrentPeriod;
 
-        const adminLastPeriod = await Admin.countDocuments({
-            createdAt: { $gte: startPeriod, $lt: endPeriod }
-        });
-        const deliverLastPeriod = await Deliver.countDocuments({
-            createdAt: { $gte: startPeriod, $lt: endPeriod }
-        });
+        const adminLastPeriod = await Admin.countDocuments({createdAt: { $gte: startPeriod, $lt: endPeriod }});
+        const deliverLastPeriod = await Deliver.countDocuments({createdAt: { $gte: startPeriod, $lt: endPeriod }});
         const totalLastPeriod = adminLastPeriod + deliverLastPeriod;
 
         let percentIncreaseUser = 0;
