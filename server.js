@@ -22,6 +22,7 @@ const app = express();
 const PORT = process.env.PORT || 5050;
 
 const Pharmacy = require('@models/Pharmacy');
+const Activity = require('@models/Activity');
 const { v4: uuidv4 } = require('uuid');
 
 app.use(express.json());
@@ -234,8 +235,8 @@ async function importData() {
                 const Country = require('@models/Country'); 
                 await Country.insertMany(countries);
                 console.log('🌍 Countries data has been added to the database!');
-                const numberOfPharmacies = 100;
-                seedPharmacies(numberOfPharmacies);              
+                seedPharmacies(100);
+                seedActivities(300);
             } else {
                 console.error('❌ Les modèles n\'ont pas pu être chargés.');
             }
@@ -246,6 +247,41 @@ async function importData() {
         // process.exit(1);
     }
 }
+
+const generateActivity = () => {
+  const types = ['order', 'pharmacy', 'payment', 'user', 'delivery'];
+  // const types = ['login', 'logout', 'order_created', 'order_updated', 'pharmacy_updated', 'profile_updated'];
+  const users = ['admin', 'deliver', 'customer', 'pharmacy_owner'];
+  return {
+    type: faker.helpers.arrayElement(types),
+    title: faker.lorem.sentence(),
+    userId: uuidv4(),
+    id_object: uuidv4(),
+    userType: faker.helpers.arrayElement(users),
+    description: faker.lorem.sentence(),
+    createdAt: faker.date.recent({ days: 60 })
+  };
+};
+
+const seedActivities = async (count) => {
+  try {
+    await Activity.deleteMany({});
+    console.log('Cleared existing activities');
+
+    const activities = [];
+    for (let i = 0; i < count; i++) {
+      activities.push(generateActivity());
+      if ((i + 1) % 10 === 0 || i === count - 1) {
+        console.log(`Generated ${i + 1} of ${count} activities`);
+      }
+    }
+
+    await Activity.insertMany(activities);
+    console.log(`Successfully seeded ${count} activities`);
+  } catch (error) {
+    console.error('Error seeding activities:', error);
+  }
+};
 
 async function loadModels(directory) {
     const models = {};
@@ -258,7 +294,6 @@ async function loadModels(directory) {
             if ((await fs.stat(filePath)).isFile() && filePath.endsWith('.js')) {
                 const modelName = path.basename(file, '.js');
                 const model = require(filePath);
-
                 models[modelName] = model;
                 console.log(`✅ Modèle chargé : ${modelName}`);
             }
@@ -276,7 +311,7 @@ const connectWithRetry = () => {
     .then(async () => {
         console.log('✅ MongoDB connecté avec succès');
         if (process.env.NODE_ENV !== 'production') {
-          await importData();  // Appel de l'importation des données et du chargement des modèles
+          await importData();
           console.log('✅ Importation des données terminée.');
         }
         app.use('/deliver/api', deliverRoutes);
@@ -310,8 +345,7 @@ const connectWithRetry = () => {
     })
     .catch(err => {
         console.error('❌ Erreur de connexion MongoDB :', err);
-    setTimeout(connectWithRetry, 5000);
-        // process.exit(1);
+        setTimeout(connectWithRetry, 5000);
     });
   }
   connectWithRetry();
