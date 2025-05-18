@@ -69,12 +69,12 @@ const loadGeneralsInfo = async (req, res) => {
             break;
             case 3: // semaine dernière
             {
-                const dayOfWeek = now.getDay() || 7; // 1 (lundi) - 7 (dimanche)
+                const dayOfWeek = now.getDay() || 7;
                 const lastWeekStart = new Date(now);
-                lastWeekStart.setDate(now.getDate() - dayOfWeek - 7);
+                lastWeekStart.setDate(now.getDate() - dayOfWeek - 6);
                 lastWeekStart.setHours(0,0,0,0);
                 const lastWeekEnd = new Date(now);
-                lastWeekEnd.setDate(now.getDate() - dayOfWeek );
+                lastWeekEnd.setDate(now.getDate() - dayOfWeek -1 );
                 lastWeekEnd.setHours(0,0,0,0);
                 startPeriod = lastWeekStart;
                 endPeriod = lastWeekEnd;
@@ -89,7 +89,7 @@ const loadGeneralsInfo = async (req, res) => {
             break;
             case 1: // mois dernier (défaut)
             default:
-            startPeriod = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+            startPeriod = new Date(now.getFullYear(), now.getMonth() - 1, 1);
             endPeriod = new Date(now.getFullYear(), now.getMonth(), 1);
             break;
         }
@@ -104,26 +104,22 @@ const loadGeneralsInfo = async (req, res) => {
         const totalLastPeriod = adminLastPeriod + deliverLastPeriod;
 
         let percentIncreaseUser = 0;
-        if (totalCurrentPeriod > 0) {
-            percentIncreaseUser = (totalLastPeriod / totalCurrentPeriod) * 100;
-        } else {
-            percentIncreaseUser = 0;
+        if (totalLastPeriod){
+            if (totalCurrentPeriod > 0) { percentIncreaseUser = (totalLastPeriod / totalCurrentPeriod) * 100;}
+            else { percentIncreaseUser = 0;}
         }
+        else { percentIncreaseUser = 100;}
 
         // Pharmacies
-        const pharmaciesCurrentPeriod = await Pharmacy.countDocuments({
-            createdAt: { $gte: endPeriod }
-        });
-        const pharmaciesLastPeriod = await Pharmacy.countDocuments({
-            createdAt: { $gte: startPeriod, $lt: endPeriod }
-        });
+        const pharmaciesCurrentPeriod = await Pharmacy.countDocuments({ createdAt: { $gte: endPeriod } });
+        const pharmaciesLastPeriod = await Pharmacy.countDocuments({ createdAt: { $gte: startPeriod, $lt: endPeriod } });
 
         let percentIncreasePharmacies = 0;
-        if (pharmaciesCurrentPeriod > 0) {
-            percentIncreasePharmacies = (pharmaciesLastPeriod / pharmaciesCurrentPeriod) * 100;
-        } else {
-            percentIncreasePharmacies = 0;
+        if (pharmaciesLastPeriod){
+            if (pharmaciesCurrentPeriod > 0) { percentIncreasePharmacies = (pharmaciesLastPeriod / pharmaciesCurrentPeriod) * 100; }
+            else { percentIncreasePharmacies = 0; }
         }
+        else { percentIncreasePharmacies = 100; }
 
         data = [
             {
