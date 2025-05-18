@@ -25,7 +25,111 @@ const authentificateUser = async (req, res) => {
         return res.status(500).json({ error: error.message });
     }
 };
+const loadGeneralsInfo = async (req, res) => {
+    try {
+        const { status, region, search, period } = req.body;
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
 
+        if (the_admin.error ) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        user = the_admin.the_user;
+        user.photoURL =  user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        let query = {};
+        
+        if (status) { query.status = status;}
+        if (region) { query['location.latitude'] = region; }
+        if (search) {
+            query.$or = [
+                { name: { $regex: search, $options: 'i' } },
+                { address: { $regex: search, $options: 'i' } },
+                { email: { $regex: search, $options: 'i' } },
+                { phoneNumber: { $regex: search, $options: 'i' } },
+                { licenseNumber: { $regex: search, $options: 'i' } },
+                { siret: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        //nbr users + pharmacies
+        const pharmaciesCount = await Pharmacy.countDocuments(query);
+        const adminCount = await Admin.countDocuments();
+        const deliverCount = await Deliver.countDocuments();
+        const totalUser = adminCount + deliverCount;
+
+        //  pourcentage
+            // period: 1 = mois dernier, 2 = année dernière, 3 = semaine dernière, 4 = jour précédent
+        const now = new Date();
+        // const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        let startPeriod, endPeriod;
+        switch (parseInt(period) || 1) {
+            case 2: // année dernière
+            startPeriod = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+            endPeriod = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            break;
+            case 3: // semaine dernière
+            {
+                const dayOfWeek = now.getDay() || 7; // 1 (lundi) - 7 (dimanche)
+                const lastWeekStart = new Date(now);
+                lastWeekStart.setDate(now.getDate() - dayOfWeek - 6);
+                lastWeekStart.setHours(0,0,0,0);
+                const lastWeekEnd = new Date(now);
+                lastWeekEnd.setDate(now.getDate() - dayOfWeek + 1);
+                lastWeekEnd.setHours(0,0,0,0);
+                startPeriod = lastWeekStart;
+                endPeriod = lastWeekEnd;
+            }
+            break;
+            case 4: // jour précédent
+            startPeriod = new Date(now);
+            startPeriod.setDate(now.getDate() - 1);
+            startPeriod.setHours(0,0,0,0);
+            endPeriod = new Date(now);
+            endPeriod.setHours(0,0,0,0);
+            break;
+            case 1: // mois dernier (défaut)
+            default:
+            startPeriod = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            endPeriod = new Date(now.getFullYear(), now.getMonth(), 1);
+            break;
+        }
+
+        //users pourcentage
+        const adminLastPeriod = await Admin.countDocuments({
+            createdAt: { $gte: startPeriod, $lt: endPeriod }
+        });
+        const deliverLastPeriod = await Deliver.countDocuments({
+            createdAt: { $gte: startPeriod, $lt: endPeriod }
+        });
+        const totalLastPeriod = adminLastPeriod + deliverLastPeriod;
+
+        let percentIncreaseUser = 0;
+        if (totalLastPeriod > 0) { percentIncreaseUser = ((totalUser - totalLastPeriod) / totalLastPeriod) * 100; }
+        else { percentIncreaseUser = 100; }
+
+        //pharmacies pourcentage
+        const pharmaciesLastPeriod = await Pharmacy.countDocuments({
+            createdAt: { $gte: startPeriod, $lt: endPeriod }
+        });
+        let percentIncreasePharmacies = 0;
+        if (pharmaciesLastPeriod > 0) { percentIncreasePharmacies = ((pharmaciesCount - pharmaciesLastPeriod) / pharmaciesLastPeriod) * 100; }
+        else { percentIncreasePharmacies = 100; }
+
+        data = {
+            totalUser: totalUser,
+            pharmaciesCount: pharmaciesCount,
+            adminCount: adminCount,
+            deliverCount: deliverCount,
+            percentIncreaseUser: percentIncreaseUser,
+            percentIncreasePharmacies: percentIncreasePharmacies
+        }
+
+        return res.status(200).json({'error':0, user: user, data: data });
+
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+};
 const setProfilInfo = async (req, res) => {
     try {
         const { name, surname, email, phone, countryCode } = req.body;
@@ -50,7 +154,6 @@ const setProfilInfo = async (req, res) => {
         return res.status(500).json({ error: error.message });
     }
 };
-
 const setSettingsFont = async (req, res) => {
     try {
         const { font } = req.body;
@@ -80,7 +183,6 @@ const setSettingsFont = async (req, res) => {
         return res.status(500).json({ error: error.message });
     }
 };
-
 const pharmacieList = async (req, res) => {
     try {
         const { status, region, search } = req.body;
@@ -112,7 +214,6 @@ const pharmacieList = async (req, res) => {
         return res.status(500).json({ error: error.message });
     }
 };
-
 const pharmacieDetails = async (req, res) => {
     try {
         const { id } = req.body;
@@ -132,7 +233,6 @@ const pharmacieDetails = async (req, res) => {
         return res.status(500).json({ error: error.message });
     }
 };
-
 const pharmacieNew = async (req, res) => {
     try {
         const { name, address, logoUrl, licenseNumber, siret, phoneNumber, email, location, workingHours, openingHours } = req.body;
@@ -160,7 +260,6 @@ const pharmacieNew = async (req, res) => {
         return res.status(500).json({ error: error.message });
     }
 };
-
 const pharmacieEdit = async (req, res) => {
     try {
         const { id, name, address, logoUrl, phoneNumber, email, location, workingHours, openingHours } = req.body;
@@ -191,7 +290,6 @@ const pharmacieEdit = async (req, res) => {
         return res.status(500).json({ error: error.message });
     }
 };
-
 const pharmacieDelete = async (req, res) => {
     try {
         const { id } = req.body;
@@ -213,7 +311,6 @@ const pharmacieDelete = async (req, res) => {
         return res.status(500).json({ error: error.message });
     }
 };
-
 const pharmacieApprove = async (req, res) => {
     try {
         const { id } = req.body;
@@ -240,7 +337,6 @@ const pharmacieApprove = async (req, res) => {
         return res.status(500).json({ error: error.message });
     }
 };
-
 const pharmacieSuspend= async (req, res) => {
     try {
         const { id, reason } = req.body;
@@ -269,7 +365,6 @@ const pharmacieSuspend= async (req, res) => {
         return res.status(500).json({ error: error.message });
     }
 };
-
 const pharmacieActive= async (req, res) => {
     try {
         const { id } = req.body;
@@ -298,7 +393,6 @@ const pharmacieActive= async (req, res) => {
         return res.status(500).json({ error: error.message });
     }
 };
-
 const pharmacieReject= async (req, res) => {
     try {
         const { id, reason } = req.body;
@@ -326,7 +420,6 @@ const pharmacieReject= async (req, res) => {
         return res.status(500).json({ error: error.message });
     }
 };
-
 const pharmacieDocuments= async (req, res) => {
     try {
         const { id, type_ } = req.body;
@@ -349,7 +442,6 @@ const pharmacieDocuments= async (req, res) => {
         return res.status(500).json({ error: error.message });
     }
 };
-
 const pharmacieDocumentsDownload = async (req, res) => {
     try {
         const { id, type_ } = req.body;
@@ -372,6 +464,5 @@ const pharmacieDocumentsDownload = async (req, res) => {
         return res.status(500).json({ error: error.message });
     }
 };
-
 //exports
-module.exports = { authentificateUser, setProfilInfo, setSettingsFont, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload };
+module.exports = { authentificateUser, setProfilInfo, loadGeneralsInfo, setSettingsFont, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload };
