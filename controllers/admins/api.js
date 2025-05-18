@@ -118,10 +118,10 @@ const loadGeneralsInfo = async (req, res) => {
         data = [
             {
                 name : 'Pharmacies',
-                type: 1,
+                type: percentIncreasePharmacies ? 1 : 0,
                 total: pharmaciesCount,
                 difference: percentIncreasePharmacies,
-                color: percentIncreasePharmacies >= 0 ? 'bg-success' : 'bg-danger',
+                color: 'bg-success',
                 icon: 'fa fa-clinic-medical',
                 divicon: 'pharmacy-icon',
             },
@@ -143,10 +143,10 @@ const loadGeneralsInfo = async (req, res) => {
             },
             {
                 name : 'Utilisateurs',
-                type: 0,
+                type: percentIncreaseUser ? 1 : 0,
                 difference: percentIncreaseUser,
                 total: totalUser,
-                color: percentIncreaseUser >= 0 ? 'bg-success' : 'bg-danger',
+                // color: percentIncreaseUser >= 0 ? 'bg-success' : 'bg-danger',
                 icon: 'fa fa-user',
                 divicon: 'user-icon',
             }
