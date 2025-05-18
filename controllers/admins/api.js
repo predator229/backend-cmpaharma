@@ -115,14 +115,42 @@ const loadGeneralsInfo = async (req, res) => {
         if (pharmaciesLastPeriod > 0) { percentIncreasePharmacies = ((pharmaciesCount - pharmaciesLastPeriod) / pharmaciesLastPeriod) * 100; }
         else { percentIncreasePharmacies = 100; }
 
-        data = {
-            totalUser: totalUser,
-            pharmaciesCount: pharmaciesCount,
-            adminCount: adminCount,
-            deliverCount: deliverCount,
-            percentIncreaseUser: percentIncreaseUser,
-            percentIncreasePharmacies: percentIncreasePharmacies
-        }
+        data = [
+            {
+                name : 'Pharmacies',
+                type: 1,
+                total: pharmaciesCount,
+                difference: percentIncreasePharmacies,
+                color: percentIncreasePharmacies >= 0 ? 'bg-success' : 'bg-danger',
+                icon: 'fa fa-clinic-medical',
+                divicon: 'pharmacy-icon',
+            },
+            {
+                name : 'Commandes',
+                type: 1,
+                total: 2356,
+                difference: '23',
+                icon: 'fa fa-shopping-cart',
+                divicon: 'order-icon',
+            },
+            {
+                name : 'Revenus plateforme',
+                type: 1,
+                total: 45780,
+                difference: '18',
+                icon: 'fa fa-euro-sign',
+                divicon: 'revenue-icon',
+            },
+            {
+                name : 'Utilisateurs',
+                type: 0,
+                difference: percentIncreaseUser,
+                total: totalUser,
+                color: percentIncreaseUser >= 0 ? 'bg-success' : 'bg-danger',
+                icon: 'fa fa-user',
+                divicon: 'user-icon',
+            }
+        ];
 
         return res.status(200).json({'error':0, user: user, data: data });
 
