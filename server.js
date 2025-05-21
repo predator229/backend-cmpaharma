@@ -223,28 +223,25 @@ const generateProduct = () => {
   };
 async function importData() {
     try {
-            console.log('🗑️ Suppression de toutes les collections...');
-            const collections = await mongoose.connection.db.listCollections().toArray();
-            for (let collection of collections) {
-                await mongoose.connection.db.collection(collection.name).deleteMany({});
-
-            const ok = await loadModels(path.join(__dirname, 'models'));
-            if (ok) {
-                const data = await fs.readFile('countries.json', 'utf8');
-                const countries = JSON.parse(data);    
-                const Country = require('@models/Country'); 
-                await Country.insertMany(countries);
-                console.log('🌍 Countries data has been added to the database!');
-                seedPharmacies(100);
-                seedActivities(300);
-            } else {
-                console.error('❌ Les modèles n\'ont pas pu être chargés.');
-            }
-        }
-
+    //   console.log('🗑️ Suppression de toutes les collections...');
+    //   const collections = await mongoose.connection.db.listCollections().toArray();
+    //   for (let collection of collections) {
+    //       await mongoose.connection.db.collection(collection.name).deleteMany({});
+    //   }
+      const ok = await loadModels(path.join(__dirname, 'models'));
+      if (ok) {
+          // const data = await fs.readFile('countries.json', 'utf8');
+          // const countries = JSON.parse(data);    
+          // const Country = require('@models/Country'); 
+          // await Country.insertMany(countries);
+          // console.log('🌍 Countries data has been added to the database!');
+          seedPharmacies(50);
+          seedActivities(50);
+      } else {
+          console.error('❌ Les modèles n\'ont pas pu être chargés.');
+      }
     } catch (error) {
         console.error('❌ Error:', error);
-        // process.exit(1);
     }
 }
 
@@ -304,7 +301,6 @@ async function loadModels(directory) {
         return false;  // Retourner false si une erreur se produit
     }
 }
-
 const connectWithRetry = () => {
   console.log('🟡 Tentative de connexion MongoDB...');
   mongoose.connect(process.env.MONGO_URI)
