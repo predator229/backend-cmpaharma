@@ -10,6 +10,50 @@ const Deliver = require('@models/Deliver');
 const Admin = require('@models/Admin');
 const SetupBase = require('@models/SetupBase');
 
+const getUserInfoByEmail = async (email, type) => {
+    const firebaseApp = getFirebaseApp(type);
+
+    if (!firebaseApp) {
+        throw new Error(`Firebase app not initialized for type: ${type}`);
+    }
+
+    try {
+        const userRecord = await firebaseApp.auth().getUserByEmail(email);
+        return {
+            status: 200,
+            user: userRecord,
+        };
+    } catch (error) { return { status: 404, message: 'User not found in Firebase', error: error.message };
+    }
+};
+
+const signUpUserWithEmailAndPassword = async (email, password, type) => {
+  const firebaseApp = getFirebaseApp(type);
+
+  if (!firebaseApp) {
+    throw new Error(`Firebase app not initialized for type: ${type}`);
+  }
+
+  try {
+    const userRecord = await firebaseApp.auth().createUser({
+      email,
+      password,
+      emailVerified: false,
+      disabled: false,
+    });
+
+    return {
+      status: 201, message: 'User successfully created',
+      user: {
+        uid: userRecord.uid,
+        email: userRecord.email
+      }
+    };
+  } catch (error) {
+    return { status: 400, message: 'Error creating user', error: error.message };
+  }
+};
+
 const getUserInfoByUUID = async (uuid, type) => {
     const firebaseApp = getFirebaseApp(type);
 
@@ -221,4 +265,4 @@ const generateUserResponse = async (user) => {
     };
   };
   
-module.exports = { getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse};
+module.exports = { getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse, getUserInfoByEmail, signUpUserWithEmailAndPassword};

@@ -292,7 +292,7 @@ async function loadModels(directory) {
                 const modelName = path.basename(file, '.js');
                 const model = require(filePath);
                 models[modelName] = model;
-                console.log(`✅ Modèle chargé : ${modelName}`);
+                if (process.env.NODE_ENV == 'dev') { console.log(`✅ Modèle chargé : ${modelName}`); }
             }
         }
         return true;  // Retourner true si les modèles sont chargés avec succès
@@ -302,11 +302,12 @@ async function loadModels(directory) {
     }
 }
 const connectWithRetry = () => {
-  console.log('🟡 Tentative de connexion MongoDB...');
+  if (process.env.NODE_ENV == 'development') { console.log(`🟡 Tentative de connexion MongoDB...`); }
   mongoose.connect(process.env.MONGO_URI)
     .then(async () => {
-        console.log('✅ MongoDB connecté avec succès');
-        if (process.env.NODE_ENV !== 'production') {
+      if (process.env.NODE_ENV == 'development') { console.log(`✅ MongoDB connecté avec succès`); }
+
+        if (process.env.NODE_ENV == 'dev') {
           await importData();
           console.log('✅ Importation des données terminée.');
         }
