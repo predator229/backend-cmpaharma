@@ -1,4 +1,5 @@
 require('dotenv').config();
+const nodemailer = require('nodemailer');
 const { getFirebaseApp } = require('@config/firebase');
 
 const Uid = require('@models/Uid');
@@ -10,6 +11,15 @@ const Deliver = require('@models/Deliver');
 const Admin = require('@models/Admin');
 const SetupBase = require('@models/SetupBase');
 
+const transporter = nodemailer.createTransport({
+    host: 'smtp.gmail.com', 
+    port: 587,
+    secure: false,
+    auth: {
+        user: process.env.MAIL_USER, 
+        pass: process.env.MAIL_PASS,
+    },
+});
 const getUserInfoByEmail = async (email, type) => {
     const firebaseApp = getFirebaseApp(type);
 
@@ -24,6 +34,45 @@ const getUserInfoByEmail = async (email, type) => {
             user: userRecord,
         };
     } catch (error) { return { status: 404, message: 'User not found in Firebase', error: error.message };
+    }
+};
+const deleteUserByEmail = async (emailOrUid, type, iamEmail) => {
+    const firebaseApp = getFirebaseApp(type);
+    if (!firebaseApp) { throw new Error(`Firebase app not initialized for type: ${type}`);}
+    try {
+        const userRecord = await iamEmail ? firebaseApp.auth().getUserByEmail(emailOrUid) : firebaseApp.auth().deleteUser(emailOrUid);
+        await firebaseApp.auth().deleteUser(userRecord.uid);
+        return { status: 200, message: `User with email ${email} successfully deleted.`, };
+    } catch (error) {
+        return { status: 404, message: 'Error deleting user from Firebase', error: error.message};
+    }
+};
+const createUserAndSendEmailLink = async (email, type, actionUrl) => {
+    const firebaseApp = getFirebaseApp(type);
+    if (!firebaseApp) { throw new Error(`Firebase app not initialized for type: ${type}`);}
+    try {
+        const userRecord = await firebaseApp.auth().createUser({ email, emailVerified: false });
+        const link = await firebaseApp.auth().generatePasswordResetLink(email, {
+            url: actionUrl, // URL vers ton frontend ou une page dédiée
+            handleCodeInApp: true,
+        });
+
+        await transporter.sendMail({
+            from: `"Support CTMPHARMA" <${process.env.MAIL_USER}>`,
+            to: email,
+            subject: 'Activez votre compte CTMPHARMA',
+            html: `
+                <p>Bonjour,</p>
+                <p>Un compte vient d’être créé pour vous sur <b>CTMPHARMA</b>.</p>
+                <p>Veuillez cliquer sur le bouton ci-dessous pour définir votre mot de passe :</p>
+                <p><a href="${link}" style="background-color:#4CAF50;color:white;padding:10px 20px;text-decoration:none;border-radius:5px;">Créer mon mot de passe</a></p>
+                <p>Si vous n’êtes pas à l’origine de cette demande, vous pouvez ignorer cet email.</p>
+                <p>L’équipe LokaPharms</p>
+            `,
+        });
+        return {status: 200, message: `User created and email sent to ${email}`, resetLink: link};
+    } catch (error) {
+        return { status: 400, message: 'Error creating user or sending email', error: error.message, };
     }
 };
 
@@ -86,7 +135,7 @@ const getTheCurrentUserOrFailed = async (req, res) => {
      ): false;
 
      //to use after to save new user
-    if (!the_user && process.env.NODE_ENV !== 'production') {
+    if (!the_user && false) { //process.env.NODE_ENV !== 'production'
 
         const result = await getUserInfoByUUID(uid, type);
         if (result.status !== 200) {
@@ -232,8 +281,6 @@ const getTheCurrentUserOrFailed = async (req, res) => {
             await the_user.save();
         }
     }
-  
-
     return {error : the_user ? 0 : 1, the_user:the_user, status:200};
 };
 const generateUserResponse = async (user) => {
@@ -265,4 +312,4 @@ const generateUserResponse = async (user) => {
     };
   };
   
-module.exports = { getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse, getUserInfoByEmail, signUpUserWithEmailAndPassword};
+module.exports = { getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse, getUserInfoByEmail, signUpUserWithEmailAndPassword, createUserAndSendEmailLink,deleteUserByEmail };

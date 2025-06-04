@@ -1,5 +1,5 @@
 require('module-alias/register');
-const {getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse, getUserInfoByEmail, signUpUserWithEmailAndPassword} = require('@tools/flutter_tools');
+const {getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse, getUserInfoByEmail, signUpUserWithEmailAndPassword,createUserAndSendEmailLink,deleteUserByEmail} = require('@tools/flutter_tools');
 
 const { parsePhoneNumberFromString } = require('libphonenumber-js');
 const Uid = require('@models/Uid');
@@ -33,216 +33,189 @@ const checkPharmacyInfo = async (req, res) => {
 
 const checkPharmacyOwnerInfo = async (req, res) => {
     try {
-        var { type_account, email} = req.body;
-        
-        if (!type_account || !email) {  return res.status(200).json({'error':0, continue: false, errorMessage: 'Veuillez remplir toutes les informations necessaires'}); }
+        let {
+            type_account,
+            pharmacy_name,
+            pharmacy_address,
+            pharmacy_phone,
+            pharmacy_email,
+            owner_full_name,
+            owner_email,
+            owner_phone
+        } = req.body;
+
+        if (!pharmacy_name || !pharmacy_address || !pharmacy_phone || !pharmacy_email || !owner_email) {
+            return res.status(200).json({ error: 0, continue: false, errorMessage: 'Veuillez remplir toutes les informations nécessaires.' });
+        }
 
         type_account = parseInt(type_account);
 
-        var firebaseRezult = await getUserInfoByEmail(email, req.body.type);
+        let firebaseRezult = await getUserInfoByEmail(owner_email, req.body.type);
+        let the_user = null;
 
-        if (type_account == 1) {
-            if (firebaseRezult.status !== 200 ) {
-                return res.status(200).json({'error':0, continue: false, errorMessage:'L\'email du proprietaire du compte n\'est pas asscocier a un compte existant'});
-            }
-
-            var admin = await Admin.findOne({ email: email });
-            if (admin && (admin.role == 'admin' || admin.role =='manager')) {
-                return res.status(200).json({'error':0, continue: false, errorMessage:'Le compte indique ne peut pas etre utiliser pour etre associer a une nouvelle pharmacie !'});
-            }
-            if (!admin) {
-                const result = firebaseRezult.user;
-                let country = null;
-                let thetelephone = null;
-                let the_user = null;
-            
-                if (!the_user && result.email) {
-                    the_user = await Admin.findOne({ email: result.email })
-                                        .populate('country')
-                                        .populate('phone')
-                                        .populate('mobils')
-                                        .populate('setups').populate('pharmaciesManaged');
-        
-                    if (thetelephone){ the_user.phone = thetelephone._id; }
-                    else if (phoneNumber && country){
-                        const userPhone = new Mobil({
-                            digits: phoneNumber.nationalNumber,
-                            indicatif: country.dial_code,
-                            title: phoneNumber.nationalNumber,
-                        });
-                        await userPhone.save();
-                        the_user.phone = userPhone._id;
-                    }
-                }
-                uidObj = new Uid({ uid: result.uid });
-                await uidObj.save();
-        
-                    const setups_base = new SetupBase({
-                        font_family: 'Poppins',
-                        font_size: 14,
-                        theme: 'light',
-                        isCollapse_menu: true,
-                    });
-                    await setups_base.save();
-                    setups_base.id = setups_base._id;
-                    await setups_base.save();
-    
-                    the_user = new Admin({
-                        uids: [uidObj._id],
-                        email: result.email ?? email,
-                        name: result.displayName?.split(' ')[0] ?? '',
-                        surname: result.displayName?.split(' ').slice(1).join(' ') ?? '',
-                        address: '',
-                        country: infos.country?._id ?? (country ? country._id : null),
-                        photoURL: result.photoURL,
-                        disabled: result.disabled,
-                        role: 'pharmacist-owner',
-                        permissions : ['read', 'write'] ,
-                        isActivated: true,
-                        lastLogin: Date(),
-                        setups: setups_base._id,
-                        pharmaciesManaged: [],
-                        coins: 0,
-                    });
-                    
-                    // if (thetelephone){ the_user.phone = thetelephone._id; }
-                    // else if (phoneNumber && country){
-                    //     const userPhone = new Mobil({
-                    //         digits: phoneNumber.nationalNumber,
-                    //         indicatif: country.dial_code,
-                    //         title: phoneNumber.nationalNumber,
-                    //     });
-                    //     type == 'deliver' ? await User.save(the_user) : await Admin.save(the_user);
-                    //     the_user.phone = userPhone._id;
-                    // }
-                    imnewuser = 1;
-                    await the_user.save();
-                // } else {
-                //     if ( uidObj && !the_user.uids.includes(uidObj._id)) {
-                //         the_user.uids.push(uidObj._id);
-                //         await the_user.save();
-                //     }
-                // }
-             }
-             return res.json({ error: 0, continue: true, message: 'User created successfully', uid: uidObj.uid });
-        }
-        if (type_account == 2){
-            if (firebaseRezult.status === 200 ) {
-                return res.status(200).json({'error':0, exist: false, errorMessage:'L\'email est deja utilise par un autre compte'});
-            }
-            var admin = await Admin.findOne({ email: email });
-            if (admin) {
-                return res.status(200).json({'error':0, exist: false, errorMessage:'Le compte indique ne peut pas etre utiliser pour etre associer a une nouvelle pharmacie !'});
-            }
-            return res.json({ error: 0, continue: true, message: 'User created successfully' });
-        }
-        return res.json({ error: 0, continue: false, errorMessage: 'Erreur de com avec le server' });
-    } catch (error) {
-        return res.status(500).json({ error: error.message });
-    }
-};
-const newPharmacie = async (req, res) => {
-    try {
-        const { pharmacy_name, pharmacy_address, pharmacy_phone, pharmacy_email, owner_full_name,owner_email, owner_phone, function_phone, uid  } = req.body;
-        
-        if ( !pharmacy_name || !pharmacy_address || !pharmacy_phone || !pharmacy_email || !owner_full_name ||!owner_email || !owner_phone || !function_phone || !uid)   {  return res.status(200).json({'error':0, continue: false, errorMessage: 'Veuillez remplir toutes les informations necessaires'}); }
-
-        type_account = parseInt(type_account);
-
-        var firebaseRezult = await getUserInfoByUUID(uid, req.body.type);
-
-        if (firebaseRezult.status !== 200 ) {
-            return res.status(200).json({'error':0, continue: false, errorMessage:'L\'email n\'est pas asscocier a un compte partenair'});
+        // Vérifie si l’email de la pharmacie existe déjà
+        let query = { email: pharmacy_email };
+        let pharmaciesCount = await Pharmacy.countDocuments(query);
+        if (pharmaciesCount) {
+            return res.status(200).json({
+                error: 0,
+                continue: false,
+                exist: true,
+                errorMessage: 'L\'email est déjà enregistré avec un autre partenaire.'
+            });
         }
 
-        var the_user = await the_user.findOne({ email: email });
-        if (the_user && (the_user.role == 'admin' || admin.role =='manager')) {
-            return res.status(200).json({'error':0, continue: false, errorMessage:'Le compte indique ne peut pas etre utiliser pour etre associer a une nouvelle pharmacie !'});
+        // Vérifie si d'autres infos similaires existent déjà
+        if (pharmacy_name) query.name = pharmacy_name;
+        if (pharmacy_address) query.address = pharmacy_address;
+        if (pharmacy_phone) query.phoneNumber = pharmacy_phone;
+
+        pharmaciesCount = await Pharmacy.countDocuments(query);
+        if (pharmaciesCount) {
+            return res.status(200).json({
+                error: 0,
+                exist: true,
+                continue: false,
+                errorMessage: 'Les informations entrées sont déjà associées à une autre pharmacie.'
+            });
         }
 
-        if (!the_user) {
+        // Création de la pharmacie
+        const pharmacie = new Pharmacy({
+            name: pharmacy_name,
+            address: pharmacy_address,
+            phoneNumber: pharmacy_phone,
+            email: pharmacy_email
+        });
+
+        // Cas 1 : le propriétaire a déjà un compte
+        if (type_account === 1) {
+            if (firebaseRezult.status !== 200) {
+                return res.status(200).json({
+                    error: 0,
+                    continue: false,
+                    errorMessage: 'L\'email du propriétaire du compte n\'est pas associé à un compte existant.'
+                });
+            }
+
+            the_user = await Admin.findOne({ email: owner_email });
+            if (the_user && (the_user.role === 'admin' || the_user.role === 'manager')) {
+                return res.status(200).json({
+                    error: 0,
+                    continue: false,
+                    errorMessage: 'Ce compte ne peut pas être associé à une nouvelle pharmacie.'
+                });
+            }
+        }
+
+        // Cas 2 : créer un nouveau compte pour le propriétaire
+        if (type_account === 2) {
+            if (firebaseRezult.status === 200) {
+                return res.status(200).json({
+                    error: 0,
+                    exist: false,
+                    errorMessage: 'L\'email est déjà utilisé par un autre compte.'
+                });
+            }
+
+            the_user = await Admin.findOne({ email: owner_email });
+            if (the_user) {
+                return res.status(200).json({
+                    error: 0,
+                    exist: false,
+                    errorMessage: 'Ce compte ne peut pas être associé à une nouvelle pharmacie.'
+                });
+            }
+
+            const resultCreatedUser = await createUserAndSendEmailLink(owner_email, req.body.type, 'http://localhost:4200/login');
+            // if (resultCreatedUser.status !== 200) {
+            //     return res.status(200).json({
+            //         error: 0,
+            //         exist: false,
+            //         continue: false,
+            //         errorMessage: 'Erreur lors de la création du compte after flutter .'
+            //     });
+            // }
+
+            firebaseRezult = await getUserInfoByEmail(owner_email, req.body.type,);
+            if (firebaseRezult.status !== 200) {
+                return res.status(200).json({
+                    error: 0,
+                    exist: false,
+                    continue: false,
+                    errorMessage: 'Erreur lors de la création du compte after after flutter.'
+                });
+            }
+
             const result = firebaseRezult.user;
             let country = null;
-            let thetelephone = null;
-            let the_user = null;
-        
-            if (!the_user && result.email) {
-                the_user = await Admin.findOne({ email: result.email })
-                                    .populate('country')
-                                    .populate('phone')
-                                    .populate('mobils')
-                                    .populate('setups').populate('pharmaciesManaged');
-    
-                if (thetelephone){ the_user.phone = thetelephone._id; }
-                else if (phoneNumber && country){
-                    const userPhone = new Mobil({
-                        digits: phoneNumber.nationalNumber,
-                        indicatif: country.dial_code,
-                        title: phoneNumber.nationalNumber,
-                    });
-                    await userPhone.save();
-                    the_user.phone = userPhone._id;
-                }
+
+            const phoneNumber = owner_phone ? parsePhoneNumberFromString(owner_phone) : null;
+            if (phoneNumber) {
+                country = await Country.findOne({ code: phoneNumber.country });
             }
-            uidObj = new Uid({ uid: result.uid });
+
+            if (country) {
+                const userPhone = new Mobil({
+                    digits: phoneNumber.nationalNumber,
+                    indicatif: country.dial_code,
+                    title: phoneNumber.nationalNumber
+                });
+                await userPhone.save();
+                the_user = { phone: userPhone._id };
+            } else {
+                the_user = {};
+            }
+
+            const uidObj = new Uid({ uid: result.uid });
             await uidObj.save();
-    
+
             const setups_base = new SetupBase({
                 font_family: 'Poppins',
                 font_size: 14,
                 theme: 'light',
-                isCollapse_menu: true,
+                isCollapse_menu: true
             });
-            await setups_base.save();
-            setups_base.id = setups_base._id;
             await setups_base.save();
 
             the_user = new Admin({
                 uids: [uidObj._id],
-                email: result.email ?? email,
-                name:  owner_full_name.displayName?.split(' ')[0] ?? (result.displayName?.split(' ')[0] ?? ''),
-                surname: owner_full_name.displayName?.split(' ').slice(1).join(' ')  ?? (result.displayName?.split(' ').slice(1).join(' ') ?? ''),
+                email: result.email ?? owner_email,
+                name: owner_full_name?.split(' ')[0] ?? result.displayName?.split(' ')[0] ?? '',
+                surname: owner_full_name?.split(' ').slice(1).join(' ') ?? result.displayName?.split(' ').slice(1).join(' ') ?? '',
                 address: '',
-                country: infos.country?._id ?? (country ? country._id : null),
+                phone: the_user.phone ?? null,
+                country: country ?? null,
                 photoURL: result.photoURL,
-                disabled: result.disabled,
+                disabled: false,
                 role: 'pharmacist-owner',
-                permissions : ['read', 'write'] ,
+                permissions: ['read', 'write'],
                 isActivated: true,
-                lastLogin: Date(),
+                lastLogin: new Date(),
                 setups: setups_base._id,
                 pharmaciesManaged: [],
-                coins: 0,
+                coins: 0
             });
-                    
-            imnewuser = 1;
+
             await the_user.save();
         }
 
-        query = { email: pharmacy_email };
-        var pharmaciesCount = await Pharmacy.countDocuments(query);
-        if (pharmaciesCount) { return res.status(200).json({'error':0, exist: pharmaciesCount != 0, errorMessage:'L\'email est deja enregistrer aveec un autre partenaire' }); }
+        if (the_user) {
+            await pharmacie.save();
+            the_user.pharmaciesManaged.push(pharmacie._id);
+            await the_user.save();
+            return res.json({ error: 0, continue: true, message: 'Pharmacie et propriétaire validés avec succès.' });
+        }else{
+            return res.status(200).json({
+                error: 0,
+                continue: false,
+                errorMessage: 'Tout est ok mais le compte ne s\'est pas creer normalement!'
+            });
+        }
 
-        if (pharmacy_name) { query.name = pharmacy_name; }
-        if (pharmacy_address) { query.address = pharmacy_address; }
-        if (pharmacy_phone) { query.phoneNumber = pharmacy_phone; }
-
-        var pharmaciesCount = await Pharmacy.countDocuments(query);
-        if (pharmaciesCount) { return res.status(200).json({'error':0, exist: pharmaciesCount != 0, errorMessage:'Les informatioons entrees existent deja enregistrer avec un autre partenaire'}); }
-
-        var pharmacie = new Pharmacy();
-        pharmacie.name = pharmacy_name;
-        pharmacie.address = pharmacy_address;
-        pharmacie.phoneNumber = pharmacy_phone;
-        pharmacie.email = pharmacy_email;
-        pharmacie.phoneNumber = pharmacy_phone;
-       
-        await pharmacie.save();
-            
-        return res.json({ error: 0, message:'Les details de la pharmacie ont ete enregistres avec success! Vous pouvez egalememnt vous connecter en utilisant les informations de connection que vous avez entrer!' });
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }
 };
 
-module.exports = { checkPharmacyInfo, checkPharmacyOwnerInfo, newPharmacie };
+module.exports = { checkPharmacyInfo, checkPharmacyOwnerInfo };

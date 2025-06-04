@@ -14,7 +14,7 @@ const adminSchema = new mongoose.Schema({
   mobils: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Mobil' }],
   phone: { type: mongoose.Schema.Types.ObjectId, ref: 'Mobil' },
 
-  // pharmaciesManaged: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Pharmacy', required: false }],
+  pharmaciesManaged: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Pharmacy', required: false }],
 
   role: { type: String, enum: ['superadmin', 'admin', 'manager', 'pharmacist-owner', 'pharmacits-manager'], required: true, default: 'admin' },
   permissions: { 

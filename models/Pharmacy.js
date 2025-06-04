@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
+    // "error": "Pharmacy validation failed: location: Path `location` is required., siret: Path `siret` is required., licenseNumber: Path `licenseNumber` is required., ownerId: Path `ownerId` is required."
 
 const LocationSchema = new Schema({
   latitude: {
@@ -120,16 +121,16 @@ const PharmacySchema = new Schema({
   },
   ownerId: {
     type: String,
-    required: true
+    required: false
   },
   licenseNumber: {
     type: String,
-    required: true,
+    required: false,
     unique: true
   },
   siret: {
     type: String,
-    required: true,
+    required: false,
     unique: true
   },
   phoneNumber: {
@@ -151,7 +152,7 @@ const PharmacySchema = new Schema({
   },
   location: {
     type: LocationSchema,
-    required: true
+    required: false
   },
   products: {
     type: [ProductSchema],
