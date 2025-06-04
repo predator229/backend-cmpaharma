@@ -4,7 +4,7 @@ const { createAuthMiddleware } = require('@middlewares/auth');
 
 const { verifyFirebaseToken: deliververifyFirebaseToken, injectDeliverType } = createAuthMiddleware('admin');
 const { authentificateUser, setProfilInfo, loadGeneralsInfo, setSettingsFont, loadAllActivities, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload,} = require('@controllers/admins/api');
-const {checkPharmacyInfo, checkPharmacyOwnerInfo, newPharmacie} = require('@controllers/guest/api');
+const {checkPharmacyInfo, checkPharmacyOwnerInfo} = require('@controllers/guest/api');
 
 const router = express.Router();
 router.use(injectDeliverType);
@@ -12,7 +12,7 @@ router.use(injectDeliverType);
 //checker without authentification
 router.get('/', (req, res) => { res.status(200).json({ message: 'API admin is running' }); });
 router.post('/pharmacies/check-pharmacy-info', checkPharmacyInfo);
-router.post('/pharmacies/check-owner-info', checkPharmacyOwnerInfo);
+router.post('/pharmacies/check-owner-and-save-info', checkPharmacyOwnerInfo);
 
 //admins
 router.post('/users/authentificate', deliververifyFirebaseToken, authentificateUser);
@@ -33,9 +33,5 @@ router.post('/managers/pharmacies/activate', deliververifyFirebaseToken, pharmac
 router.post('/managers/pharmacies/reject', deliververifyFirebaseToken, pharmacieReject);
 router.post('/managers/pharmacies/documents', deliververifyFirebaseToken, pharmacieDocuments);
 router.post('/managers/pharmacies/documents/download', deliververifyFirebaseToken, pharmacieDocumentsDownload);
-
-//pharmacies-admin
-router.post('/pharmacies/new-pharmacie-', deliververifyFirebaseToken, newPharmacie);
-
 
 module.exports = router;
