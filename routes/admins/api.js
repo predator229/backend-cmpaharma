@@ -1,6 +1,7 @@
 require('module-alias/register');
 const express = require('express');
 const { createAuthMiddleware } = require('@middlewares/auth');
+const {getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse, getUserInfoByEmail, signUpUserWithEmailAndPassword,createUserAndSendEmailLink,deleteUserByEmail} = require('@tools/flutter_tools');
 
 const { verifyFirebaseToken: deliververifyFirebaseToken, injectDeliverType } = createAuthMiddleware('admin');
 const { authentificateUser, setProfilInfo, loadGeneralsInfo, setSettingsFont, loadAllActivities, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload,} = require('@controllers/admins/api');
@@ -13,6 +14,19 @@ router.use(injectDeliverType);
 router.get('/', (req, res) => { res.status(200).json({ message: 'API admin is running' }); });
 router.post('/pharmacies/check-pharmacy-info', checkPharmacyInfo);
 router.post('/pharmacies/check-owner-and-save-info', checkPharmacyOwnerInfo);
+
+router.get('/testcreatingandsendingemail', async (req, res) => { 
+    if (req.body.email) {
+        const resultCreatedUser = await createUserAndSendEmailLink(req.body.email, "admin", process.env.FRONT_BASE_LINK+'set-password');
+        if (resultCreatedUser.status == 200) {
+            return res.status(200).json({ message: 'All ok' });
+        } else{
+            return res.status(200).json({ message: resultCreatedUser.error ?? 'noepe', actionUrl: resultCreatedUser.actionUrl ?? '' });
+        }
+    }
+    res.status(200).json({ message: 'API admin is running' });
+});
+
 
 //admins
 router.post('/users/authentificate', deliververifyFirebaseToken, authentificateUser);
