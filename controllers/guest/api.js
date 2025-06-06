@@ -127,15 +127,7 @@ const checkPharmacyOwnerInfo = async (req, res) => {
                 });
             }
 
-            const resultCreatedUser = await createUserAndSendEmailLink(owner_email, req.body.type, 'http://localhost:4200/login');
-            // if (resultCreatedUser.status !== 200) {
-            //     return res.status(200).json({
-            //         error: 0,
-            //         exist: false,
-            //         continue: false,
-            //         errorMessage: 'Erreur lors de la création du compte after flutter .'
-            //     });
-            // }
+            const resultCreatedUser = await createUserAndSendEmailLink(owner_email, req.body.type, process.env.FRONT_BASE_LINK+'login');
 
             firebaseRezult = await getUserInfoByEmail(owner_email, req.body.type,);
             if (firebaseRezult.status !== 200) {

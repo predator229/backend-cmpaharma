@@ -53,7 +53,7 @@ const createUserAndSendEmailLink = async (email, type, actionUrl) => {
     try {
         const userRecord = await firebaseApp.auth().createUser({ email, emailVerified: false });
         const link = await firebaseApp.auth().generatePasswordResetLink(email, {
-            url: actionUrl, // URL vers ton frontend ou une page dédiée
+            url: actionUrl,
             handleCodeInApp: true,
         });
 
@@ -67,12 +67,12 @@ const createUserAndSendEmailLink = async (email, type, actionUrl) => {
                 <p>Veuillez cliquer sur le bouton ci-dessous pour définir votre mot de passe :</p>
                 <p><a href="${link}" style="background-color:#4CAF50;color:white;padding:10px 20px;text-decoration:none;border-radius:5px;">Créer mon mot de passe</a></p>
                 <p>Si vous n’êtes pas à l’origine de cette demande, vous pouvez ignorer cet email.</p>
-                <p>L’équipe LokaPharms</p>
+                <p>L’équipe CTMPHARMA</p>
             `,
         });
         return {status: 200, message: `User created and email sent to ${email}`, resetLink: link};
     } catch (error) {
-        return { status: 400, message: 'Error creating user or sending email', error: error.message, };
+        return { status: 400, message: 'Error creating user or sending email', error: error.message, actionUrl: actionUrl };
     }
 };
 
