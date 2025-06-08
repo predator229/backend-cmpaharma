@@ -431,7 +431,7 @@ const pharmacieDelete = async (req, res) => {
         const pharmacy = await Pharmacy.findById(id);
         if (!pharmacy) { return res.status(404).json({ success: false, message: 'Pharmacie non trouvée' });}
 
-        await pharmacy.remove();
+        await pharmacy.delete();
   
         res.json({ error: 0, success: true, message: 'Pharmacie supprimée avec succès' });
     } catch (error) {
