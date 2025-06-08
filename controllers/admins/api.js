@@ -250,7 +250,7 @@ const setSettingsFont = async (req, res) => {
         }
         setups.font_family = font;
         await setups.save();
-        await registerActivity('General Settings', userPhone._id, "Parametre generals modifier", "Les parametres generaux de l'utilisateur ont ete modifies pour l\'utilisateur "+user.name);
+        await registerActivity('General Settings', user._id, "Parametre generals modifier", "Les parametres generaux de l'utilisateur ont ete modifies pour l\'utilisateur "+user.name);
 
         user.setups = setups;
 
@@ -370,8 +370,8 @@ const pharmacieNew = async (req, res) => {
 
         const pharmacy = new Pharmacy({ name, address, logoUrl, ownerId: req.user.id, licenseNumber, siret, phoneNumber, email, status: 'pending', location: location_._id });
         await pharmacy.save();
-        await registerActivity('Pharmacie', userPhone._id, "Pharmacie Ajoute", "La pharmacie "+pharmacy.name+" a ete ajoute!");
-        await registerActivity('Location', userPhone._id, "Emplacement Ajoute", "L\'emplacement de la pharmacie "+pharmacy.name+" a ete ajoute!");
+        await registerActivity('Pharmacie', user._id, "Pharmacie Ajoute", "La pharmacie "+pharmacy.name+" a ete ajoute!");
+        await registerActivity('Location', user._id, "Emplacement Ajoute", "L\'emplacement de la pharmacie "+pharmacy.name+" a ete ajoute!");
 
         return res.status(200).json({'error':0, success: true, user: user, data: pharmacy });
     } catch (error) {
@@ -402,14 +402,14 @@ const pharmacieEdit = async (req, res) => {
         // if (openingHours) pharmacy.openingHours = openingHours;
         
         await pharmacy.save();
-        await registerActivity('Pharmacie', userPhone._id, "Pharmacie Modifiee", "Les informations de la pharmacie "+pharmacy.name+" a ete modifie!");
+        await registerActivity('Pharmacie', user._id, "Pharmacie Modifiee", "Les informations de la pharmacie "+pharmacy.name+" a ete modifie!");
         if (location) {
             var theLoc = await Location.find({ _id: location._id });
                 if (theLoc && (theLoc.latitude !== location.latitude || theLoc.longitude !== location.longitude)) {
                 theLoc.latitude = theLoc.latitude;
                 theLoc.longitude = theLoc.longitude;
                 await theLoc.save();
-                await registerActivity('Location', userPhone._id, "Emplacement Modifie", "L\'emplacement de la pharmacie "+pharmacy.name+" a ete modifie!");
+                await registerActivity('Location', user._id, "Emplacement Modifie", "L\'emplacement de la pharmacie "+pharmacy.name+" a ete modifie!");
             }
         }
         return res.status(200).json({'error':0, success: true, user: user, data: pharmacy });
@@ -458,7 +458,7 @@ const pharmacieApprove = async (req, res) => {
           
         pharmacy.status = 'active';
         await pharmacy.save();
-        await registerActivity('Pharmacie', userPhone._id, "Pharmacie Modifiee", "Le statut de la pharmacie "+pharmacy.name+" a ete modifie en "+ pharmacy.status);
+        await registerActivity('Pharmacie', user._id, "Pharmacie Modifiee", "Le statut de la pharmacie "+pharmacy.name+" a ete modifie en "+ pharmacy.status);
       
         return res.status(200).json({'error':0, success: true,user: user, data: pharmacy });
     } catch (error) {
@@ -487,7 +487,7 @@ const pharmacieSuspend= async (req, res) => {
         pharmacy.suspensionDate = new Date();
         pharmacy.suspensionReason = reason || 'Suspension administrative';
         await pharmacy.save();
-        await registerActivity('Pharmacie', userPhone._id, "Pharmacie Modifiee", "Le statut de la pharmacie "+pharmacy.name+" a ete modifie en "+ pharmacy.status);
+        await registerActivity('Pharmacie', user._id, "Pharmacie Modifiee", "Le statut de la pharmacie "+pharmacy.name+" a ete modifie en "+ pharmacy.status);
 
         return res.status(200).json({'error':0, success: true,user: user, data: pharmacy });
     } catch (error) {
@@ -516,7 +516,7 @@ const pharmacieActive= async (req, res) => {
         pharmacy.suspensionDate = null;
         pharmacy.suspensionReason = null;
         await pharmacy.save();
-        await registerActivity('Pharmacie', userPhone._id, "Pharmacie Modifiee", "Le statut de la pharmacie "+pharmacy.name+" a ete modifie en "+ pharmacy.status);
+        await registerActivity('Pharmacie', user._id, "Pharmacie Modifiee", "Le statut de la pharmacie "+pharmacy.name+" a ete modifie en "+ pharmacy.status);
 
         return res.status(200).json({'error':0,success: true, user: user, data: pharmacy });
     } catch (error) {
@@ -544,7 +544,7 @@ const pharmacieReject= async (req, res) => {
         pharmacy.status = 'rejected';
         pharmacy.suspensionReason = reason || 'Demande rejetée';
         await pharmacy.save();
-        await registerActivity('Pharmacie', userPhone._id, "Pharmacie Modifiee", "Le statut de la pharmacie "+pharmacy.name+" a ete modifie en "+ pharmacy.status);
+        await registerActivity('Pharmacie', user._id, "Pharmacie Modifiee", "Le statut de la pharmacie "+pharmacy.name+" a ete modifie en "+ pharmacy.status);
             
         return res.status(200).json({'error':0,success: true, user: user, data: pharmacy });
     } catch (error) {
