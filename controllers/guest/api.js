@@ -1,5 +1,5 @@
 require('module-alias/register');
-const {getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse, getUserInfoByEmail, signUpUserWithEmailAndPassword,createUserAndSendEmailLink,deleteUserByEmail} = require('@tools/flutter_tools');
+const {getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse, getUserInfoByEmail, signUpUserWithEmailAndPassword,createUserAndSendEmailLink,deleteUserByEmail, registerActivity} = require('@tools/flutter_tools');
 
 const { parsePhoneNumberFromString } = require('libphonenumber-js');
 const Uid = require('@models/Uid');
@@ -19,7 +19,7 @@ const checkPharmacyInfo = async (req, res) => {
         if (email) {
             query = { email: email };
             var pharmaciesCount = await Pharmacy.countDocuments(query);
-            if (pharmaciesCount) { return res.status(200).json({'error':0, exist: pharmaciesCount != 0, errorMessage:'L\'email est deja enregistrer aveec un autre partenaire' }); }
+            if (pharmaciesCount) { return res.status(200).json({'error':0, exist: pharmaciesCount != 0, errorMessage:'L\'email de la pharmacie entree est deja enregistrer aveec un autre pharmacie' }); }
         }
         if (phone) { query.phaneNumber = phone; }
         if (name) { query.name = name; }
@@ -128,6 +128,9 @@ const checkPharmacyOwnerInfo = async (req, res) => {
             }
 
             const resultCreatedUser = await createUserAndSendEmailLink(owner_email, req.body.type, process.env.FRONT_BASE_LINK+'login');
+            if (resultCreatedUser.status != 200) {
+                return res.status(200).json({ error: 1, message: resultCreatedUser.error ?? 'Erreur lors de la création du compte.', errorMessage: resultCreatedUser.error ?? 'Erreur lors de la création du compte.' });
+            }
 
             firebaseRezult = await getUserInfoByEmail(owner_email, req.body.type,);
             if (firebaseRezult.status !== 200) {
@@ -135,7 +138,7 @@ const checkPharmacyOwnerInfo = async (req, res) => {
                     error: 0,
                     exist: false,
                     continue: false,
-                    errorMessage: 'Erreur lors de la création du compte after after flutter.'
+                    errorMessage: 'Erreur lors de la création du compte. Veuillez réessayer.'
                 });
             }
 
@@ -154,6 +157,8 @@ const checkPharmacyOwnerInfo = async (req, res) => {
                     title: phoneNumber.nationalNumber
                 });
                 await userPhone.save();
+                await registerActivity('Phone Number', userPhone._id, "Nouveau numero de telephone", "Un numero de telephone d'utilisateur a ete cree");
+                
                 the_user = { phone: userPhone._id };
             } else {
                 the_user = {};
@@ -169,6 +174,7 @@ const checkPharmacyOwnerInfo = async (req, res) => {
                 isCollapse_menu: true
             });
             await setups_base.save();
+            await registerActivity('Genaral Settings', setups_base._id, "Nouveau parametres generals ajoute", "Des parametres generaux de utilisateur ont ete crees");
 
             the_user = new Admin({
                 uids: [uidObj._id],
@@ -190,6 +196,7 @@ const checkPharmacyOwnerInfo = async (req, res) => {
             });
 
             await the_user.save();
+            await registerActivity('Pharmacist-owner', the_user._id, "Nouveau utilisateur", "Un compte du pharmacien a ete cree!");
         }
 
         if (the_user) {
