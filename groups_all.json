@@ -1,0 +1,149 @@
+[
+  {
+    "code": "superadmin",
+    "name": "Super Administrateur",
+    "description": "Accès total à toute la plateforme, toutes les fonctionnalités Admin & Pharmacy incluses",
+    "plateform": "Admin",
+    "createdBy": "System",
+    "isActive": true,
+    "permissions": "ALL" 
+  },
+  {
+    "code": "admin",
+    "name": "Administrateur Plateforme",
+    "description": "Gestion quotidienne de la plateforme, pharmacies, livreurs, paiements, utilisateurs et support",
+    "plateform": "Admin",
+    "createdBy": "System",
+    "isActive": true,
+    "permissions": [
+      "dashboard_admin.view",
+      "dashboard_admin.stats",
+      "pharmacies.view",
+      "pharmacies.create",
+      "pharmacies.edit",
+      "pharmacies.suspend",
+      "pharmacies.stats",
+      "livreurs.view",
+      "livreurs.create",
+      "livreurs.validate",
+      "livreurs.suspend",
+      "commandes_globales.view",
+      "commandes_globales.stats",
+      "transactions.view",
+      "transactions.verification",
+      "support_central.view",
+      "support_central.assign",
+      "support_central.resolve",
+      "utilisateurs_admin.view",
+      "utilisateurs_admin.create",
+      "utilisateurs_admin.roles",
+      "parametres_plateforme.view",
+      "parametres_plateforme.edit",
+      "statistiques.view",
+      "statistiques.filtrer",
+
+      "historique_actions.view",
+      "historique_actions.filtrer"
+    ]
+  },
+  {
+    "code": "manager",
+    "name": "Manager de Pharmacie",
+    "description": "Accès administratif à une ou plusieurs pharmacies (produits, commandes, paiements, horaires, stats)",
+    "plateform": "Pharmacy",
+    "createdBy": "System",
+    "isActive": true,
+    "permissions": [
+      "dashboard.view",
+      "dashboard.stats",
+
+      "produits.view",
+      "produits.create",
+      "produits.edit",
+      "produits.suspend",
+
+      "commandes.view",
+      "commandes.assign",
+      "commandes.historique",
+
+      "paiements.view",
+      "paiements.retraits",
+      "paiements.stats",
+
+      "livreurs.view",
+      "livreurs.assign",
+      "livreurs.statut",
+
+      "pharmacie_infos.view",
+      "pharmacie_infos.edit",
+      "pharmacie_infos.horaires",
+
+      "parametres_plateforme.notifications_view",
+
+      "statistiques.view",
+      "statistiques.filtrer"
+    ]
+  },
+  {
+    "code": "pharmacist-owner",
+    "name": "Pharmacien Propriétaire",
+    "description": "Propriétaire officiel de la pharmacie, accès complet à ses données et supervision",
+    "plateform": "Pharmacy",
+    "createdBy": "System",
+    "isActive": true,
+    "permissions": [
+      "dashboard.view",
+      "dashboard.stats",
+
+      "produits.view",
+      "produits.create",
+      "produits.edit",
+      "produits.suspend",
+      "produits.export",
+
+      "commandes.view",
+      "commandes.assign",
+      "commandes.historique",
+      "commandes.export",
+
+      "paiements.view",
+      "paiements.retraits",
+      "paiements.stats",
+      "paiements.export",
+
+      "livreurs.view",
+      "livreurs.assign",
+      "livreurs.statut",
+
+      "pharmacie_infos.view",
+      "pharmacie_infos.edit",
+      "pharmacie_infos.horaires",
+
+      "parametres.notifications_view",
+
+      "statistiques.view",
+      "statistiques.filtrer",
+      "statistiques.export"
+    ]
+  },
+  {
+    "code": "pharmacist-manager",
+    "name": "Pharmacien Manager",
+    "description": "Responsable opérationnel de la pharmacie, accès limité à l’administration courante",
+    "plateform": "Pharmacy",
+    "createdBy": "System",
+    "isActive": true,
+    "permissions": [
+      "dashboard.view",
+      "produits.view",
+      "produits.create",
+      "produits.edit",
+      "commandes.view",
+      "commandes.assign",
+      "paiements.view",
+      "livreurs.view",
+      "pharmacie_infos.view",
+      "parametres.notifications_view"
+    ]
+  }
+]

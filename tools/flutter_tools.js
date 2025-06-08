@@ -5,6 +5,7 @@ const { getFirebaseApp } = require('@config/firebase');
 const Uid = require('@models/Uid');
 const Country = require('@models/Country');
 const Mobil = require('@models/Mobil');
+const Group = require('@models/Group');
 
 const { parsePhoneNumberFromString } = require('libphonenumber-js');
 const Deliver = require('@models/Deliver');
@@ -129,14 +130,19 @@ const getTheCurrentUserOrFailed = async (req, res) => {
         .populate('phone')
         .populate('mobils') : 
         await Admin.findOne({ uids: uidObj._id }) 
-        .populate('country')
-        .populate('phone')
-        .populate('mobils')
-        .populate('setups')
-        .populate('pharmaciesManaged')
+        .populate([
+            { path: 'country' },
+            { path: 'pharmaciesManaged' },
+            { path: 'phone' },
+            { path: 'mobils' },
+            { path: 'setups' },
+            { path: 'groups', populate: [
+                { path: 'permissions' }
+            ]}
+        ])
      ): false;
 
-    if (the_user.role == 'pharmacist-owner' && the_user.pharmaciesManaged && the_user.pharmaciesManaged.length > 0) {
+    if (the_user.groups && the_user.groups.map(p => registerActivity.code).includes('pharmacist-owner') && the_user.pharmaciesManaged && the_user.pharmaciesManaged.length > 0) {
        if (typeof the_user.pharmaciesManaged[0] === 'object' && the_user.pharmaciesManaged[0].workingHours !== undefined) {
             the_user.pharmaciesManaged = the_user.pharmaciesManaged.map(async function (pharmacy) { 
                 pharmacy.orders = await Order.find({ pharmacy_id: pharmacy._id, status: 'pending' })
@@ -190,10 +196,16 @@ const getTheCurrentUserOrFailed = async (req, res) => {
                                 .populate('phone')
                                 .populate('mobils') : 
                                 await Admin.findOne({ email: result.user.email })
-                                .populate('country')
-                                .populate('phone')
-                                .populate('mobils')
-                                .populate('setups').populate('pharmaciesManaged');
+                                .populate([
+                                    { path: 'country' },
+                                    { path: 'pharmaciesManaged' },
+                                    { path: 'phone' },
+                                    { path: 'mobils' },
+                                    { path: 'setups' },
+                                    { path: 'groups', populate: [
+                                        { path: 'permissions' }
+                                    ]}
+                                ]);
 
             if (thetelephone){ the_user.phone = thetelephone._id; }
             else if (phoneNumber && country){
@@ -224,6 +236,7 @@ const getTheCurrentUserOrFailed = async (req, res) => {
                 setups_base.id = setups_base._id;
                 await setups_base.save();
 
+                var groups = await Group.find({code:'superadmin', plateform: "Admin" });
                 the_user = new Admin({
                     uids: [uidObj._id],
                     email: result.user.email ?? infos.email,
@@ -233,9 +246,8 @@ const getTheCurrentUserOrFailed = async (req, res) => {
                     country: infos.country?._id ?? (country ? country._id : null),
                     photoURL: result.user.photoURL,
                     disabled: result.user.disabled,
-                    role: 'manager',
-                    permissions : ['read'] ,
-                    isActivated: false,
+                    groups: groups.map(group => group._id),
+                    isActivated: true,
                     lastLogin: Date(),
                     setups: setups_base._id,
                     pharmaciesManaged: [],
@@ -281,6 +293,17 @@ const getTheCurrentUserOrFailed = async (req, res) => {
             }
             imnewuser = 1;
             await the_user.save();
+            if (type != 'deliver') {
+            await the_user.populate([
+                    { path: 'country' },
+                    { path: 'phone' },
+                    { path: 'mobils' },
+                    { path: 'setups' },
+                    { path: 'groups', populate: [
+                        { path: 'permissions',  }
+                    ] }
+                ]);
+            }
             await registerActivity( type == 'deliver' ? "Deliver" : (the_user.role == 'pharmacist-owner' ? 'Pharmacist Owner' : 'Administrateur'), the_user._id, "New user registed", "");
         } else {
             if ( uidObj && !the_user.uids.includes(uidObj._id)) {
