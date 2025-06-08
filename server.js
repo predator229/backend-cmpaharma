@@ -199,7 +199,7 @@ const connectWithRetry = () => {
     .then(async () => {
       if (process.env.NODE_ENV == 'development') { console.log(`✅ MongoDB connecté avec succès`); }
 
-        if (process.env.NODE_ENV == 'developpment') {
+        if (process.env.NODE_ENV != 'production') {
           await importData();
           console.log('✅ Importation des données terminée.');
         }
