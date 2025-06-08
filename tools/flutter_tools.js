@@ -178,7 +178,16 @@ const getTheCurrentUserOrFailed = async (req, res) => {
                     for (const phone of phones) {
                         const userWithPhone = type == 'deliver' ?  await Deliver.findOne({ phone: phone._id })
                             .populate('country').populate('phone').populate('mobils') :  await Admin.findOne({ phone: phone._id })
-                            .populate('country').populate('phone').populate('mobils').populate('setups').populate('pharmaciesManaged')
+                            populate([
+                            { path: 'country' },
+                            { path: 'pharmaciesManaged' },
+                            { path: 'phone' },
+                            { path: 'mobils' },
+                            { path: 'setups' },
+                            { path: 'groups', populate: [
+                                { path: 'permissions' }
+                            ]}
+                        ])
                             ;
                         if (userWithPhone) {
                             the_user = userWithPhone;

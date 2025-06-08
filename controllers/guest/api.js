@@ -99,7 +99,16 @@ const checkPharmacyOwnerInfo = async (req, res) => {
                 });
             }
 
-            the_user = await Admin.findOne({ email: owner_email });            
+            the_user = await Admin.findOne({ email: owner_email }).populate([
+            { path: 'country' },
+            { path: 'pharmaciesManaged' },
+            { path: 'phone' },
+            { path: 'mobils' },
+            { path: 'setups' },
+            { path: 'groups', populate: [
+                { path: 'permissions' }
+            ]}
+        ]);
             if (  the_user?.groups?.some(g => ['admin', 'manager'].includes(g.code))) {
                 return res.status(200).json({
                     error: 0,
@@ -119,7 +128,16 @@ const checkPharmacyOwnerInfo = async (req, res) => {
                 });
             }
 
-            the_user = await Admin.findOne({ email: owner_email });
+            the_user = await Admin.findOne({ email: owner_email }).populate([
+            { path: 'country' },
+            { path: 'pharmaciesManaged' },
+            { path: 'phone' },
+            { path: 'mobils' },
+            { path: 'setups' },
+            { path: 'groups', populate: [
+                { path: 'permissions' }
+            ]}
+        ]);
             if (the_user) {
                 return res.status(200).json({
                     error: 0,
