@@ -9,7 +9,7 @@ const deliverSchema = new mongoose.Schema({
   photoURL: { type: String, required: false },
   disabled: { type: Boolean, default: false },
   country: { type: mongoose.Schema.Types.ObjectId, ref: 'Country', required: false },
-  city: { type: mongoose.Schema.Types.ObjectId, ref: 'City', required: false },
+  city: { type: String, required: false },
   address: { type: String, required: false },
   mobils: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Mobil' }],
   phone: { type: mongoose.Schema.Types.ObjectId, ref: 'Mobil' },

@@ -1,5 +1,5 @@
 require('module-alias/register');
-const {getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse} = require('@tools/flutter_tools');
+const {getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse, registerActivity} = require('@tools/flutter_tools');
 const { parsePhoneNumberFromString } = require('libphonenumber-js');
 const Deliver = require('@models/Deliver');
 const Uid = require('@models/Uid');
@@ -53,6 +53,7 @@ const addMobil = async (req, res) => {
 
             the_deliver.mobils.push(mobil_._id);
             await the_deliver.save();
+            // await registerActivity('Deliver', userPhone._id, "Emplacement Modifie", "L\'emplacement de la pharmacie "+pharmacy.name+" a ete modifie!");
 
             the_deliver = await Deliver.findOne({_id: the_deliver._id}) 
                 .populate('phone')

@@ -10,6 +10,8 @@ const { parsePhoneNumberFromString } = require('libphonenumber-js');
 const Deliver = require('@models/Deliver');
 const Admin = require('@models/Admin');
 const SetupBase = require('@models/SetupBase');
+const Order = require('@models/Order');
+const Activity = require('@models/Activity');
 
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com', 
@@ -126,17 +128,33 @@ const getTheCurrentUserOrFailed = async (req, res) => {
         .populate('country')
         .populate('phone')
         .populate('mobils') : 
-        await Admin.findOne({ uids: uidObj._id, disabled: false }) 
+        await Admin.findOne({ uids: uidObj._id }) 
         .populate('country')
         .populate('phone')
         .populate('mobils')
         .populate('setups')
-        // .populate('pharmaciesManaged')
+        .populate('pharmaciesManaged')
      ): false;
 
-     //to use after to save new user
-    if (!the_user && false) { //process.env.NODE_ENV !== 'production'
+    if (the_user.role == 'pharmacist-owner' && the_user.pharmaciesManaged && the_user.pharmaciesManaged.length > 0) {
+       if (typeof the_user.pharmaciesManaged[0] === 'object' && the_user.pharmaciesManaged[0].workingHours !== undefined) {
+            the_user.pharmaciesManaged = the_user.pharmaciesManaged.map(async function (pharmacy) { 
+                pharmacy.orders = await Order.find({ pharmacy_id: pharmacy._id, status: 'pending' })
+                                            .populate('deliver_id')
+                                            .populate('customer_id')
+                                            .populate('products');
+                pharmacy.orders30days = await Order.find({ pharmacy_id: pharmacy._id, createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } })
+                                            .populate('deliver_id')
+                                            .populate('customer_id')
+                                            .populate('products');
+                pharmacy.revenue30days  = pharmacy.orders30days.reduce((total, order) => total + order.totalAmount, 0);
+                return pharmacy;
+            });
+       }
+    }
 
+     //to use after to save new user
+    if (!the_user && process.env.NODE_ENV == 'development') { //process.env.NODE_ENV !== 'production'
         const result = await getUserInfoByUUID(uid, type);
         if (result.status !== 200) {
             return {error:1};
@@ -263,6 +281,7 @@ const getTheCurrentUserOrFailed = async (req, res) => {
             }
             imnewuser = 1;
             await the_user.save();
+            await registerActivity( type == 'deliver' ? "Deliver" : (the_user.role == 'pharmacist-owner' ? 'Pharmacist Owner' : 'Administrateur'), the_user._id, "New user registed", "");
         } else {
             if ( uidObj && !the_user.uids.includes(uidObj._id)) {
                 the_user.uids.push(uidObj._id);
@@ -283,6 +302,16 @@ const getTheCurrentUserOrFailed = async (req, res) => {
     }
     return {error : the_user ? 0 : 1, the_user:the_user, status:200};
 };
+const registerActivity = async (type, id, title, description) => {
+    const activity = new Activity({
+        type: type,
+        id_object: id,
+        title: title,
+        description: description,
+    });
+    await activity.save();
+    return activity;
+}
 const generateUserResponse = async (user) => {
     user.fullName = [user.name ?? '', user.surname ?? ''].filter(Boolean).join(' ');
     user.defaultAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.fullName || 'User')}&background=random&size=500`;
@@ -312,4 +341,4 @@ const generateUserResponse = async (user) => {
     };
   };
   
-module.exports = { getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse, getUserInfoByEmail, signUpUserWithEmailAndPassword, createUserAndSendEmailLink,deleteUserByEmail };
+module.exports = { getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse, getUserInfoByEmail, signUpUserWithEmailAndPassword, createUserAndSendEmailLink,deleteUserByEmail, registerActivity };

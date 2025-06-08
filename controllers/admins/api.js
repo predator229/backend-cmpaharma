@@ -1,5 +1,5 @@
 require('module-alias/register');
-const {getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse} = require('@tools/flutter_tools');
+const {getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse,registerActivity } = require('@tools/flutter_tools');
 const { parsePhoneNumberFromString } = require('libphonenumber-js');
 const Uid = require('@models/Uid');
 const Country = require('@models/Country');
@@ -9,6 +9,7 @@ const Admin = require('@models/Admin');
 const SetupBase = require('../../models/SetupBase');
 const Pharmacy = require('@models/Pharmacy');
 const Activity = require('@models/Activity');
+const Order = require('@models/Order');
 
 const authentificateUser = async (req, res) => {
     try {
@@ -40,24 +41,24 @@ const loadGeneralsInfo = async (req, res) => {
         let query = {};
         
         if (status) { query.status = status;}
-        if (region) { query['location.latitude'] = region; }
+        if (region) {
+            const locations = await Location.find({ latitude: region }).select('_id');
+            const locationIds = locations.map(loc => loc._id);
+            query.location = { $in: locationIds };
+        }
         if (search) {
+            const cleanedSearch = search.replace(/\s+/g, '').replace(/^(\+33|0)/, '');
+            const regex = new RegExp(cleanedSearch, 'i');
             query.$or = [
-                { name: { $regex: search, $options: 'i' } },
-                { address: { $regex: search, $options: 'i' } },
-                { email: { $regex: search, $options: 'i' } },
-                { phoneNumber: { $regex: search, $options: 'i' } },
-                { licenseNumber: { $regex: search, $options: 'i' } },
-                { siret: { $regex: search, $options: 'i' } }
+                { name: regex },
+                { address: regex },
+                { email: regex },
+                { phoneNumber: { $regex: regex } },
+                { licenseNumber: regex },
+                { siret: regex },
             ];
         }
 
-        // const ordersPharmaciesCount= 0;
-        //nbr users + pharmacies
-        // const allPharmacies = await Pharmacy.find({});
-        // for (const pharmacy of allPharmacies) {
-        //     if (pharmacy.orders) { ordersPharmaciesCount += pharmacy.orders.length; }
-        // }
         const pharmaciesCount = await Pharmacy.countDocuments(query);
         const adminCount = await Admin.countDocuments();
         const deliverCount = await Deliver.countDocuments();
@@ -66,38 +67,37 @@ const loadGeneralsInfo = async (req, res) => {
         //  pourcentage
             // period: 1 = mois dernier, 2 = année dernière, 3 = semaine dernière, 4 = jour précédent
         const now = new Date();
-        // const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
         let startPeriod, endPeriod;
         switch (parseInt(thisPeriod) || 1) {
             case 2: // année dernière
-            startPeriod = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
-            endPeriod = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-            break;
+                startPeriod = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+                endPeriod = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                break;
             case 3: // semaine dernière
-            {
-                const dayOfWeek = now.getDay() || 7;
+                const dayOfWeek = now.getDay() || 7; // dimanche = 7
                 const lastWeekStart = new Date(now);
                 lastWeekStart.setDate(now.getDate() - dayOfWeek - 6);
-                lastWeekStart.setHours(0,0,0,0);
+                lastWeekStart.setHours(0, 0, 0, 0);
+
                 const lastWeekEnd = new Date(now);
-                lastWeekEnd.setDate(now.getDate() - dayOfWeek -1 );
-                lastWeekEnd.setHours(0,0,0,0);
+                lastWeekEnd.setDate(now.getDate() - dayOfWeek - 1);
+                lastWeekEnd.setHours(23, 59, 59, 999);
+
                 startPeriod = lastWeekStart;
                 endPeriod = lastWeekEnd;
-            }
-            break;
+                break;
             case 4: // jour précédent
-            startPeriod = new Date(now);
-            startPeriod.setDate(now.getDate() - 2);
-            startPeriod.setHours(0,0,0,0);
-            endPeriod = new Date(now);
-            endPeriod.setHours(0,0,0,0);
-            break;
-            case 1: // mois dernier (défaut)
+                startPeriod = new Date(now);
+                startPeriod.setDate(now.getDate() - 1);
+                startPeriod.setHours(0, 0, 0, 0);
+                endPeriod = new Date(startPeriod);
+                endPeriod.setHours(23, 59, 59, 999);
+                break;
+            case 1: // Mois dernier (par défaut)
             default:
-            startPeriod = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-            endPeriod = new Date(now.getFullYear(), now.getMonth(), 1);
-            break;
+                startPeriod = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                endPeriod = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+                break;
         }
 
         // Utilisateurs
@@ -177,9 +177,7 @@ const loadGeneralsInfo = async (req, res) => {
             recent_activities: recentActivities,
             recent_pharmacies: recentPharmacies,
         };
-
         return res.status(200).json({'error':0, user: user, data: data });
-
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }
@@ -195,7 +193,6 @@ const loadAllActivities = async (req, res) => {
         user = the_admin.the_user;
         user.photoURL =  user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
 
-        // Récupérer les x dernières activités (toutes admins confondues), triées par date décroissante
         const recentActivities = await Activity.find({})
             .sort({ "created_at.date": -1 })
             .limit(thisPeriod  ? parseInt(thisPeriod) :  50);
@@ -203,9 +200,7 @@ const loadAllActivities = async (req, res) => {
         data = {
             recent_activities: recentActivities,
         };
-
         return res.status(200).json({'error':0, user: user, data: data });
-
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }
@@ -255,6 +250,7 @@ const setSettingsFont = async (req, res) => {
         }
         setups.font_family = font;
         await setups.save();
+        await registerActivity('General Settings', userPhone._id, "Parametre generals modifier", "Les parametres generaux de l'utilisateur ont ete modifies pour l\'utilisateur "+user.name);
 
         user.setups = setups;
 
@@ -277,18 +273,34 @@ const pharmacieList = async (req, res) => {
         let query = {};
       
         if (status) { query.status = status;}
-        if (region) { query['location.latitude'] = region; }
+        if (region) {
+            const locations = await Location.find({ latitude: region }).select('_id');
+            const locationIds = locations.map(loc => loc._id);
+            query.location = { $in: locationIds };
+        }
         if (search) {
+            const cleanedSearch = search.replace(/\s+/g, '').replace(/^(\+33|0)/, '');
+            const regex = new RegExp(cleanedSearch, 'i');
             query.$or = [
-              { name: { $regex: search, $options: 'i' } },
-              { address: { $regex: search, $options: 'i' } },
-              { email: { $regex: search, $options: 'i' } },
-              { phoneNumber: { $regex: search, $options: 'i' } },
-              { licenseNumber: { $regex: search, $options: 'i' } },
-              { siret: { $regex: search, $options: 'i' } }
+                { name: regex },
+                { address: regex },
+                { email: regex },
+                { phoneNumber: { $regex: regex } },
+                { licenseNumber: regex },
+                { siret: regex },
             ];
         }
-        const pharmacies = await Pharmacy.find(query);
+        let pharmacies = await Pharmacy.find(query).lean();
+        pharmacies = await Promise.all(pharmacies.map(async function (pharmacy) { 
+            var rorders30days = await Order.find({ pharmacy_id: pharmacy._id, createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } })
+                        .populate('deliver_id')
+                        .populate('customer_id')
+                        .populate('products');
+            pharmacy.revenue30days = rorders30days.reduce((total, order) => total + (order.totalAmount || 0), 0);
+            pharmacy.rorders30days = rorders30days.length;
+            if (!pharmacy.id) { pharmacy.id = pharmacy._id; }
+            return pharmacy;
+        }));
         return res.status(200).json({'error':0, user: user, data: pharmacies });
     } catch (error) {
         return res.status(500).json({ error: error.message });
@@ -305,8 +317,17 @@ const pharmacieDetails = async (req, res) => {
         user = the_admin.the_user;
         user.photoURL =  user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
 
-        const pharmacy = await Pharmacy.findById(id);
+        let pharmacy = await Pharmacy.findById(id);
         if (!pharmacy) { return res.status(404).json({ success: false, message: 'Pharmacie non trouvée' }); }
+        pharmacy.orders = await Order.find({ pharmacy_id: pharmacy._id, status: 'pending' })
+                                        .populate('deliver_id')
+                                        .populate('customer_id')
+                                        .populate('products');
+        pharmacy.orders30days = await Order.find({ pharmacy_id: pharmacy._id, createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } })
+                                    .populate('deliver_id')
+                                    .populate('customer_id')
+                                    .populate('products');
+        pharmacy.revenue30days  = pharmacy.orders30days.reduce((total, order) => total + order.totalAmount, 0);
 
         return res.status(200).json({'error':0, user: user, data: pharmacy });
     } catch (error) {
@@ -331,10 +352,17 @@ const pharmacieNew = async (req, res) => {
               message: 'Une pharmacie avec cet email, numéro de licence ou SIRET existe déjà'
             });
         }
-        if (!pharmacy) { return res.status(404).json({ success: false, message: 'Pharmacie non trouvée' }); }
 
-        const pharmacy = new Pharmacy({ name, address, logoUrl, ownerId: req.user.id, licenseNumber, siret, phoneNumber, email, status: 'pending', location, workingHours, openingHours });
+        var location_ = new Location(location);
+        await location_.save();
+
+        // workingHours, openingHours
+
+        const pharmacy = new Pharmacy({ name, address, logoUrl, ownerId: req.user.id, licenseNumber, siret, phoneNumber, email, status: 'pending', location: location_._id });
         await pharmacy.save();
+        await registerActivity('Pharmacie', userPhone._id, "Pharmacie Ajoute", "La pharmacie "+pharmacy.name+" a ete ajoute!");
+        await registerActivity('Location', userPhone._id, "Emplacement Ajoute", "L\'emplacement de la pharmacie "+pharmacy.name+" a ete ajoute!");
+
         return res.status(200).json({'error':0, success: true, user: user, data: pharmacy });
     } catch (error) {
         return res.status(500).json({ error: error.message });
@@ -359,12 +387,21 @@ const pharmacieEdit = async (req, res) => {
         if (logoUrl) pharmacy.logoUrl = logoUrl;
         if (phoneNumber) pharmacy.phoneNumber = phoneNumber;
         if (email) pharmacy.email = email;
-        if (location) pharmacy.location = location;
-        if (workingHours) pharmacy.workingHours = workingHours;
-        if (openingHours) pharmacy.openingHours = openingHours;
+        
+        // if (workingHours) pharmacy.workingHours = workingHours;
+        // if (openingHours) pharmacy.openingHours = openingHours;
         
         await pharmacy.save();
-  
+        await registerActivity('Pharmacie', userPhone._id, "Pharmacie Modifiee", "Les informations de la pharmacie "+pharmacy.name+" a ete modifie!");
+        if (location) {
+            var theLoc = await Location.find({ _id: location._id });
+                if (theLoc && (theLoc.latitude !== location.latitude || theLoc.longitude !== location.longitude)) {
+                theLoc.latitude = theLoc.latitude;
+                theLoc.longitude = theLoc.longitude;
+                await theLoc.save();
+                await registerActivity('Location', userPhone._id, "Emplacement Modifie", "L\'emplacement de la pharmacie "+pharmacy.name+" a ete modifie!");
+            }
+        }
         return res.status(200).json({'error':0, success: true, user: user, data: pharmacy });
     } catch (error) {
         return res.status(500).json({ error: error.message });
@@ -411,6 +448,7 @@ const pharmacieApprove = async (req, res) => {
           
         pharmacy.status = 'active';
         await pharmacy.save();
+        await registerActivity('Pharmacie', userPhone._id, "Pharmacie Modifiee", "Le statut de la pharmacie "+pharmacy.name+" a ete modifie en "+ pharmacy.status);
       
         return res.status(200).json({'error':0, success: true,user: user, data: pharmacy });
     } catch (error) {
@@ -439,6 +477,7 @@ const pharmacieSuspend= async (req, res) => {
         pharmacy.suspensionDate = new Date();
         pharmacy.suspensionReason = reason || 'Suspension administrative';
         await pharmacy.save();
+        await registerActivity('Pharmacie', userPhone._id, "Pharmacie Modifiee", "Le statut de la pharmacie "+pharmacy.name+" a ete modifie en "+ pharmacy.status);
 
         return res.status(200).json({'error':0, success: true,user: user, data: pharmacy });
     } catch (error) {
@@ -467,6 +506,7 @@ const pharmacieActive= async (req, res) => {
         pharmacy.suspensionDate = null;
         pharmacy.suspensionReason = null;
         await pharmacy.save();
+        await registerActivity('Pharmacie', userPhone._id, "Pharmacie Modifiee", "Le statut de la pharmacie "+pharmacy.name+" a ete modifie en "+ pharmacy.status);
 
         return res.status(200).json({'error':0,success: true, user: user, data: pharmacy });
     } catch (error) {
@@ -494,6 +534,7 @@ const pharmacieReject= async (req, res) => {
         pharmacy.status = 'rejected';
         pharmacy.suspensionReason = reason || 'Demande rejetée';
         await pharmacy.save();
+        await registerActivity('Pharmacie', userPhone._id, "Pharmacie Modifiee", "Le statut de la pharmacie "+pharmacy.name+" a ete modifie en "+ pharmacy.status);
             
         return res.status(200).json({'error':0,success: true, user: user, data: pharmacy });
     } catch (error) {
