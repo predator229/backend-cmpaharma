@@ -160,7 +160,7 @@ const getTheCurrentUserOrFailed = async (req, res) => {
     }
 
      //to use after to save new user
-    if (!the_user && process.env.NODE_ENV == 'development') { //process.env.NODE_ENV !== 'production'
+    if (!the_user && process.env.NODE_ENV != 'production') { //process.env.NODE_ENV !== 'production'
         const result = await getUserInfoByUUID(uid, type);
         if (result.status !== 200) {
             return {error:1};
