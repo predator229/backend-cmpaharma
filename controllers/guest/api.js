@@ -128,7 +128,7 @@ const checkPharmacyOwnerInfo = async (req, res) => {
                 });
             }
 
-            const resultCreatedUser = await createUserAndSendEmailLink(owner_email, req.body.type, process.env.FRONT_BASE_LINK+'login');
+            const resultCreatedUser = await createUserAndSendEmailLink(owner_email, req.body.type, process.env.FRONT_BASE_LINK+'/login');
             if (resultCreatedUser.status != 200) {
                 return res.status(200).json({ error: 1, message: resultCreatedUser.error ?? 'Erreur lors de la création du compte.', errorMessage: resultCreatedUser.error ?? 'Erreur lors de la création du compte.' });
             }
