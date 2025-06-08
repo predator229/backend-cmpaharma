@@ -290,7 +290,17 @@ const pharmacieList = async (req, res) => {
                 { siret: regex },
             ];
         }
-        let pharmacies = await Pharmacy.find(query).lean();
+        let pharmacies =  [];
+        if (user?.groups?.some(g => ['pharmacist-owner', 'pharmacist-manager'].includes(g.code))) {
+            query._id = { $in: user.pharmaciesManaged.map(pharm => pharm._id) };
+            pharmacies = await Pharmacy.find(query).populate('location').lean();
+        }else{
+            if ( user?.groups?.some(g => ['superadmin','admin', 'manager'].includes(g.code))) {
+                pharmacies = await Pharmacy.find(query).populate('location').lean();
+            }else{
+                return res.status(200).json({'error':0, user: user, data: pharmacies, query: query });
+            }
+        }
         pharmacies = await Promise.all(pharmacies.map(async function (pharmacy) { 
             var rorders30days = await Order.find({ pharmacy_id: pharmacy._id, createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } })
                         .populate('deliver_id')

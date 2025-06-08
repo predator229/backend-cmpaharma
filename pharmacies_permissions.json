@@ -1,0 +1,418 @@
+[
+  {
+    "module": "dashboard",
+    "label": "Dashboard - Vue principale",
+    "plateform": "Pharmacy",
+    "description": "Accès à la vue principale du tableau de bord et export des statistiques",
+    "createdBy": "System",
+    "permissions": [
+      "dashboard.view",
+      "dashboard.stats",
+      "dashboard.export"
+    ]
+  },
+   {
+    "module": "paiements",
+    "label": "Suivi des paiements",
+    "plateform": "Admin",
+    "description": "Visualisation, répartition, vérification des paiements entre pharmacies, livreurs et plateforme",
+    "createdBy": "System",
+    "permissions": [
+      "paiements.view",
+      "paiements.retraits",
+      "paiements.stats",
+      "paiements.export"
+    ]
+  },
+  {
+    "module": "preparation",
+    "label": "Préparation des commandes",
+    "plateform": "Pharmacy",
+    "description": "Gestion, consultation, impression et export des préparations de commandes",
+    "createdBy": "System",
+    "permissions": [
+      "preparation.view",
+      "preparation.update",
+      "preparation.print",
+      "preparation.export"
+    ]
+  },
+  {
+    "module": "produits",
+    "label": "Gestion des produits",
+    "plateform": "Pharmacy",
+    "description": "CRUD, duplication, export et impression des produits",
+    "createdBy": "System",
+    "permissions": [
+      "produits.view",
+      "produits.create",
+      "produits.edit",
+      "produits.delete",
+      "produits.details",
+      "produits.duplicate",
+      "produits.export",
+      "produits.print",
+      "produits.suspend"
+    ]
+  },
+  {
+    "module": "categories",
+    "label": "Gestion des catégories",
+    "plateform": "Pharmacy",
+    "description": "CRUD, export et impression des catégories",
+    "createdBy": "System",
+    "permissions": [
+      "categories.view",
+      "categories.create",
+      "categories.edit",
+      "categories.delete",
+      "categories.export",
+      "categories.print"
+    ]
+  },
+  {
+    "module": "inventaire",
+    "label": "Gestion d'inventaire",
+    "plateform": "Pharmacy",
+    "description": "Consultation, modification et export des stocks et entrepôts",
+    "createdBy": "System",
+    "permissions": [
+      "inventaire.entrepot.view",
+      "inventaire.entrepot.edit",
+      "inventaire.entrepot.export",
+      "inventaire.commandes_reçues.view",
+      "inventaire.commandes_reçues.export"
+    ]
+  },
+  {
+    "module": "commandes",
+    "label": "Gestion des commandes",
+    "plateform": "Pharmacy",
+    "description": "Consultation, détails, panier, caisse, annulation, impression et export",
+    "createdBy": "System",
+    "permissions": [
+      "commandes.view",
+      "commandes.details",
+      "commandes.panier",
+      "commandes.checkout",
+      "commandes.cancel",
+      "commandes.export",
+      "commandes.print",
+      "commandes.assign",
+      "commandes.historique"
+    ]
+  },
+  {
+    "module": "achats",
+    "label": "Gestion des achats",
+    "plateform": "Pharmacy",
+    "description": "Consultation, ajout de stock, retours, impression et export",
+    "createdBy": "System",
+    "permissions": [
+      "achats.view",
+      "achats.ajout_stock",
+      "achats.retour",
+      "achats.export",
+      "achats.print"
+    ]
+  },
+  {
+    "module": "attributs",
+    "label": "Gestion des attributs",
+    "plateform": "Pharmacy",
+    "description": "CRUD, export et impression des attributs produits",
+    "createdBy": "System",
+    "permissions": [
+      "attributs.view",
+      "attributs.create",
+      "attributs.edit",
+      "attributs.delete",
+      "attributs.export",
+      "attributs.print"
+    ]
+  },
+  {
+    "module": "factures",
+    "label": "Gestion des factures",
+    "plateform": "Pharmacy",
+    "description": "Création, consultation, impression, duplication et export",
+    "createdBy": "System",
+    "permissions": [
+      "factures.view",
+      "factures.create",
+      "factures.details",
+      "factures.duplicate",
+      "factures.print",
+      "factures.export"
+    ]
+  },
+  {
+    "module": "parametres",
+    "label": "Paramètres de la pharmacie",
+    "plateform": "Pharmacy",
+    "description": "Consultation, mise à jour, import/export des paramètres de la pharmacie",
+    "createdBy": "System",
+    "permissions": [
+      "parametres.view",
+      "parametres.update",
+      "parametres.export",
+      "parametres.import",
+      "parametres.notifications_view"
+    ]
+  },
+  {
+    "module": "utilisateurs",
+    "label": "Gestion des utilisateurs",
+    "plateform": "Pharmacy",
+    "description": "Visualisation, gestion des profils, permissions, rôles, suspension, export",
+    "createdBy": "System",
+    "permissions": [
+      "utilisateurs.view",
+      "utilisateurs.create",
+      "utilisateurs.edit",
+      "utilisateurs.delete",
+      "utilisateurs.profil",
+      "utilisateurs.permissions",
+      "utilisateurs.roles",
+      "utilisateurs.suspend",
+      "utilisateurs.export"
+    ]
+  },
+  {
+    "module": "clients",
+    "label": "Gestion des clients",
+    "plateform": "Pharmacy",
+    "description": "Consultation, exportation, suppression des clients",
+    "createdBy": "System",
+    "permissions": [
+      "clients.view",
+      "clients.export",
+      "clients.delete"
+    ]
+  },
+  {
+    "module": "avis",
+    "label": "Gestion des avis",
+    "plateform": "Pharmacy",
+    "description": "Consultation, modération, suppression et export des avis clients",
+    "createdBy": "System",
+    "permissions": [
+      "avis.view",
+      "avis.moderate",
+      "avis.delete",
+      "avis.export"
+    ]
+  },
+  {
+    "module": "messagerie",
+    "label": "Messagerie interne",
+    "plateform": "Pharmacy",
+    "description": "Consultation, envoi, archivage, suppression des messages",
+    "createdBy": "System",
+    "permissions": [
+      "messagerie.view",
+      "messagerie.send",
+      "messagerie.archive",
+      "messagerie.delete"
+    ]
+  },
+  {
+    "module": "calendrier",
+    "label": "Gestion du calendrier",
+    "plateform": "Pharmacy",
+    "description": "Consultation, modification, partage du calendrier",
+    "createdBy": "System",
+    "permissions": [
+      "calendrier.view",
+      "calendrier.edit",
+      "calendrier.share"
+    ]
+  },
+  {
+    "module": "support",
+    "label": "Gestion du support",
+    "plateform": "Pharmacy",
+    "description": "Consultation, réponse, archivage des tickets de support",
+    "createdBy": "System",
+    "permissions": [
+      "support.view",
+      "support.repondre",
+      "support.archive"
+    ]
+  },
+  {
+    "module": "admin_pharmacy",
+    "label": "Administration pharmacie",
+    "plateform": "Pharmacy",
+    "description": "Logs, rôles, diagnostics, RGPD, configuration avancée de la pharmacie",
+    "createdBy": "System",
+    "permissions": [
+      "admin_pharmacy.logs.view",
+      "admin_pharmacy.logs.export",
+      "admin_pharmacy.rgpd.download",
+      "admin_pharmacy.rgpd.delete_user_data",
+      "admin_pharmacy.config.view",
+      "admin_pharmacy.config.edit",
+      "admin_pharmacy.roles.manage",
+      "admin_pharmacy.analytics.view",
+      "admin_pharmacy.analytics.export",
+      "admin_pharmacy.database.backup",
+      "admin_pharmacy.database.restore",
+      "admin_pharmacy.system.diagnostics"
+    ]
+  },
+  {
+    "module": "dashboard_admin",
+    "label": "Dashboard - Vue Admin",
+    "plateform": "Admin",
+    "description": "Vue d'ensemble des pharmacies, commandes, utilisateurs et alertes",
+    "createdBy": "System",
+    "permissions": [
+      "dashboard_admin.view",
+      "dashboard_admin.stats",
+      "dashboard_admin.export"
+    ]
+  },
+  {
+    "module": "pharmacies",
+    "label": "Gestion des pharmacies",
+    "plateform": "Admin",
+    "description": "Création, suspension, audit, stats, et configuration des pharmacies partenaires",
+    "createdBy": "System",
+    "permissions": [
+      "pharmacies.view",
+      "pharmacies.create",
+      "pharmacies.edit",
+      "pharmacies.suspend",
+      "pharmacies.audit",
+      "pharmacies.stats",
+      "pharmacies.export"
+    ]
+  },
+  {
+    "module": "livreurs",
+    "label": "Gestion des livreurs",
+    "plateform": "Admin",
+    "description": "Ajout, validation, statut actif/inactif, historique et documents légaux",
+    "createdBy": "System",
+    "permissions": [
+      "livreurs.view",
+      "livreurs.create",
+      "livreurs.validate",
+      "livreurs.suspend",
+      "livreurs.documents",
+      "livreurs.history",
+      "livreurs.assign",
+      "livreurs.statut",
+      "livreurs.export"
+    ]
+  },
+  {
+    "module": "pharmacie_info",
+    "label": "Informations des pharmacies",
+    "plateform": "Admin",
+    "description": "Infos pharmacie",
+    "createdBy": "System",
+    "permissions": [
+      "pharmacie_infos.view",
+      "pharmacie_infos.edit",
+      "pharmacie_infos.horaires"
+    ]
+  },
+  {
+    "module": "commandes_globales",
+    "label": "Suivi global des commandes",
+    "plateform": "Admin",
+    "description": "Consultation multi-pharmacie des commandes, statuts, paiements et problèmes signalés",
+    "createdBy": "System",
+    "permissions": [
+      "commandes_globales.view",
+      "commandes_globales.stats",
+      "commandes_globales.export",
+      "commandes_globales.signaler"
+    ]
+  },
+  {
+    "module": "transactions",
+    "label": "Suivi des transactions",
+    "plateform": "Admin",
+    "description": "Visualisation, répartition, vérification des paiements entre pharmacies, livreurs et plateforme",
+    "createdBy": "System",
+    "permissions": [
+      "transactions.view",
+      "transactions.verification",
+      "transactions.export",
+      "transactions.reconciliation"
+    ]
+  },
+  {
+    "module": "support_central",
+    "label": "Support utilisateurs",
+    "plateform": "Admin",
+    "description": "Réception, traitement, assignation et clôture des tickets de support",
+    "createdBy": "System",
+    "permissions": [
+      "support_central.view",
+      "support_central.assign",
+      "support_central.resolve",
+      "support_central.archive"
+    ]
+  },
+  {
+    "module": "utilisateurs_admin",
+    "label": "Utilisateurs Admin",
+    "plateform": "Admin",
+    "description": "Gestion des comptes Admin, rôles, logs, sécurité et audit",
+    "createdBy": "System",
+    "permissions": [
+      "utilisateurs_admin.view",
+      "utilisateurs_admin.create",
+      "utilisateurs_admin.roles",
+      "utilisateurs_admin.logs",
+      "utilisateurs_admin.suspend",
+      "utilisateurs_admin.audit",
+      "utilisateurs_admin.export"
+    ]
+  },
+  {
+    "module": "parametres_plateforme",
+    "label": "Paramètres de la plateforme",
+    "plateform": "Admin",
+    "description": "Gestion globale des paramètres système, RGPD, notifications, sécurité",
+    "createdBy": "System",
+    "permissions": [
+      "parametres_plateforme.view",
+      "parametres_plateforme.edit",
+      "parametres_plateforme.rgpd",
+      "parametres_plateforme.securite",
+      "parametres_plateforme.export",
+      "parametres_plateforme.import",
+      "parametres_plateforme.notifications_view"
+    ]
+  },
+  {
+    "module": "statistiques",
+    "label": "Statistiques globales",
+    "plateform": "Admin",
+    "description": "Accès aux dashboards d'analyse (livraisons, satisfaction, CA, pharmacies actives...)",
+    "createdBy": "System",
+    "permissions": [
+      "statistiques.view",
+      "statistiques.filtrer",
+      "statistiques.export"
+    ]
+  },
+  {
+    "module": "historique_actions",
+    "label": "Logs & historique",
+    "plateform": "Admin",
+    "description": "Suivi des actions, erreurs, accès, modifications sur la plateforme",
+    "createdBy": "System",
+    "permissions": [
+      "historique_actions.view",
+      "historique_actions.filtrer",
+      "historique_actions.export",
+      "historique_actions.alertes"
+    ]
+  }
+]

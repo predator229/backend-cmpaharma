@@ -16,12 +16,7 @@ const adminSchema = new mongoose.Schema({
 
   pharmaciesManaged: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Pharmacy', required: false }],
 
-  role: { type: String, enum: ['superadmin', 'admin', 'manager', 'pharmacist-owner', 'pharmacits-manager'], required: true, default: 'admin' },
-  permissions: { 
-    type: [String], 
-    enum: ['read', 'write', 'delete', 'update'], 
-    default: ['read', 'write'] 
-  }, 
+  groups: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Group', required: false }],
   setups: { type: mongoose.Schema.Types.ObjectId, ref: 'SetupBase', required: true },
 
   isActivated: { type: Boolean, default: true },

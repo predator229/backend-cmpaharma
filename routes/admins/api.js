@@ -48,4 +48,15 @@ router.post('/managers/pharmacies/reject', deliververifyFirebaseToken, pharmacie
 router.post('/managers/pharmacies/documents', deliververifyFirebaseToken, pharmacieDocuments);
 router.post('/managers/pharmacies/documents/download', deliververifyFirebaseToken, pharmacieDocumentsDownload);
 
+//pharcy-managment
+router.post('/pharmacy-managment/dashboard', deliververifyFirebaseToken, loadGeneralsInfo);
+router.post('/pharmacy-managment/dashboard/activities', deliververifyFirebaseToken, loadAllActivities);
+
+router.post('/pharmacy-managment/pharmacies/list', deliververifyFirebaseToken, pharmacieList);
+router.post('/pharmacy-managment/pharmacies/details', deliververifyFirebaseToken, pharmacieDetails);
+router.post('/pharmacy-managment/pharmacies/new', deliververifyFirebaseToken, pharmacieNew);
+router.post('/pharmacy-managment/pharmacies/edit', deliververifyFirebaseToken, pharmacieEdit);
+router.post('/pharmacy-managment/pharmacies/documents', deliververifyFirebaseToken, pharmacieDocuments);
+router.post('/pharmacy-managment/pharmacies/documents/download', deliververifyFirebaseToken, pharmacieDocumentsDownload);
+
 module.exports = router;

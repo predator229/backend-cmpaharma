@@ -10,6 +10,7 @@ const Admin = require('@models/Admin');
 const SetupBase = require('../../models/SetupBase');
 const Pharmacy = require('@models/Pharmacy');
 const Activity = require('@models/Activity');
+const Group = require('@models/Group');
 const { query } = require('express');
 
 const checkPharmacyInfo = async (req, res) => {
@@ -98,8 +99,8 @@ const checkPharmacyOwnerInfo = async (req, res) => {
                 });
             }
 
-            the_user = await Admin.findOne({ email: owner_email });
-            if (the_user && (the_user.role === 'admin' || the_user.role === 'manager')) {
+            the_user = await Admin.findOne({ email: owner_email });            
+            if (  the_user?.groups?.some(g => ['admin', 'manager'].includes(g.code))) {
                 return res.status(200).json({
                     error: 0,
                     continue: false,
@@ -176,6 +177,8 @@ const checkPharmacyOwnerInfo = async (req, res) => {
             await setups_base.save();
             await registerActivity('Genaral Settings', setups_base._id, "Nouveau parametres generals ajoute", "Des parametres generaux de utilisateur ont ete crees");
 
+            var groups = await Group.find({code:'pharmacist-owner', plateform: "Pharmacy" });
+            
             the_user = new Admin({
                 uids: [uidObj._id],
                 email: result.email ?? owner_email,
@@ -186,8 +189,7 @@ const checkPharmacyOwnerInfo = async (req, res) => {
                 country: country ?? null,
                 photoURL: result.photoURL,
                 disabled: false,
-                role: 'pharmacist-owner',
-                permissions: ['read', 'write'],
+                groups: groups.map(group => group._id),
                 isActivated: true,
                 lastLogin: new Date(),
                 setups: setups_base._id,
@@ -196,6 +198,15 @@ const checkPharmacyOwnerInfo = async (req, res) => {
             });
 
             await the_user.save();
+            await the_user.populate([
+                    { path: 'country' },
+                    { path: 'phone' },
+                    { path: 'mobils' },
+                    { path: 'setups' },
+                    { path: 'groups', populate: [
+                        { path: 'permissions',  }
+                    ] }
+                ]);
             await registerActivity('Pharmacist-owner', the_user._id, "Nouveau utilisateur", "Un compte du pharmacien a ete cree!");
         }
 
