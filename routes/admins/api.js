@@ -4,7 +4,7 @@ const { createAuthMiddleware } = require('@middlewares/auth');
 const {getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse, getUserInfoByEmail, signUpUserWithEmailAndPassword,createUserAndSendEmailLink,deleteUserByEmail} = require('@tools/flutter_tools');
 
 const { verifyFirebaseToken: deliververifyFirebaseToken, injectDeliverType } = createAuthMiddleware('admin');
-const { authentificateUser, setProfilInfo, loadGeneralsInfo, setSettingsFont, loadAllActivities, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload,} = require('@controllers/admins/api');
+const { authentificateUser, setProfilInfo, loadGeneralsInfo, setSettingsFont, loadAllActivities, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload,pharmacieUpdate} = require('@controllers/admins/api');
 const {checkPharmacyInfo, checkPharmacyOwnerInfo} = require('@controllers/guest/api');
 
 const router = express.Router();
@@ -58,5 +58,6 @@ router.post('/pharmacy-managment/pharmacies/new', deliververifyFirebaseToken, ph
 router.post('/pharmacy-managment/pharmacies/edit', deliververifyFirebaseToken, pharmacieEdit);
 router.post('/pharmacy-managment/pharmacies/documents', deliververifyFirebaseToken, pharmacieDocuments);
 router.post('/pharmacy-managment/pharmacies/documents/download', deliververifyFirebaseToken, pharmacieDocumentsDownload);
+router.post('/pharmacy-managment/pharmacies/update', deliververifyFirebaseToken, pharmacieUpdate);
 
 module.exports = router;

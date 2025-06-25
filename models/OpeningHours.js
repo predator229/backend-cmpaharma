@@ -16,7 +16,6 @@ const OpeningHoursSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
-// Index pour éviter les doublons de jours pour une même entité
 OpeningHoursSchema.index({ day: 1 });
 
 module.exports = mongoose.model('OpeningHours', OpeningHoursSchema);

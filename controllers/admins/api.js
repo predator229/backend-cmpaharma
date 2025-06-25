@@ -10,6 +10,8 @@ const SetupBase = require('../../models/SetupBase');
 const Pharmacy = require('@models/Pharmacy');
 const Activity = require('@models/Activity');
 const Order = require('@models/Order');
+const OpeningHours = require('@models/OpeningHours');
+const Location = require('@models/Location');
 
 const authentificateUser = async (req, res) => {
     try {
@@ -22,7 +24,7 @@ const authentificateUser = async (req, res) => {
 
         user.photoURL =  user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
         
-        return res.status(200).json({'error':0, user: user, message: user.new_user ? 'Bienvenu je t\'emmerde !' : 'Bon retour !' });
+        return res.status(200).json({'error':0, user: user, message: user.new_user ? 'Bienvenu !' : 'Bon retour !', onlyShowListPharm : the_admin.onlyShowListPharm  });
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }
@@ -37,6 +39,7 @@ const loadGeneralsInfo = async (req, res) => {
         }
         user = the_admin.the_user;
         user.photoURL =  user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+        user.onlyShowListPharm = the_admin.onlyShowListPharm;
 
         let query = {};
         
@@ -177,7 +180,7 @@ const loadGeneralsInfo = async (req, res) => {
             recent_activities: recentActivities,
             recent_pharmacies: recentPharmacies,
         };
-        return res.status(200).json({'error':0, user: user, data: data });
+        return res.status(200).json({'error':0, user: user, data: data, onlyShowListPharm : the_admin.onlyShowListPharm });
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }
@@ -200,7 +203,7 @@ const loadAllActivities = async (req, res) => {
         data = {
             recent_activities: recentActivities,
         };
-        return res.status(200).json({'error':0, user: user, data: data });
+        return res.status(200).json({'error':0, user: user, data: data, onlyShowListPharm : the_admin.onlyShowListPharm });
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }
@@ -254,7 +257,7 @@ const setSettingsFont = async (req, res) => {
 
         user.setups = setups;
 
-        return res.status(200).json({'error':0, user: user, message: 'Modification effectuee avec success !' });
+        return res.status(200).json({'error':0, user: user, message: 'Modification effectuee avec success !', onlyShowListPharm : the_admin.onlyShowListPharm });
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }
@@ -311,7 +314,7 @@ const pharmacieList = async (req, res) => {
             if (!pharmacy.id) { pharmacy.id = pharmacy._id; }
             return pharmacy;
         }));
-        return res.status(200).json({'error':0, user: user, data: pharmacies });
+        return res.status(200).json({'error':0, user: user, data: pharmacies, onlyShowListPharm : the_admin.onlyShowListPharm });
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }
@@ -595,5 +598,147 @@ const pharmacieDocumentsDownload = async (req, res) => {
         return res.status(500).json({ error: error.message });
     }
 };
+
+const pharmacieUpdate = async (req, res) => {
+    try {
+        const { 
+            id, name, address, phoneNumber, email, licenseNumber, siret, 
+            location, workingHours, suspensionDate, suspensionReason, comentaire 
+        } = req.body;
+
+        // Validation des champs requis
+        if (!id || !name || !address || !phoneNumber || !email || !licenseNumber || !siret) {
+            return res.status(400).json({ 
+                success: false,
+                message: 'Tous les champs obligatoires doivent être renseignés' 
+            });
+        }
+
+        // Vérification de l'utilisateur
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error) { 
+            return res.status(404).json({ message: 'User not found' }); 
+        }
+
+        const user = the_admin.the_user;
+        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        // Recherche de la pharmacie existante
+        const existingPharmacy = await Pharmacy.findById(id);
+        if (!existingPharmacy) {
+            return res.status(404).json({
+                success: false,
+                message: 'Pharmacie non trouvée'
+            });
+        }
+
+        // Vérification des doublons (excluant la pharmacie actuelle)
+        const duplicatePharmacy = await Pharmacy.findOne({ 
+            _id: { $ne: id },
+            $or: [{ email }, { licenseNumber }, { siret }] 
+        });
+        
+        if (duplicatePharmacy) {
+            return res.status(400).json({
+                success: false,
+                message: 'Une autre pharmacie avec cet email, numéro de licence ou SIRET existe déjà'
+            });
+        }
+
+        // Gestion de la localisation
+        let locationId = existingPharmacy.location;
+        if (location && location.latitude && location.longitude) {
+            if (locationId) {
+                // Mise à jour de la localisation existante
+                await Location.findByIdAndUpdate(locationId, {
+                    latitude: location.latitude,
+                    longitude: location.longitude
+                });
+            } else {
+                // Création d'une nouvelle localisation
+                const newLocation = new Location(location);
+                await newLocation.save();
+                locationId = newLocation._id;
+            }
+        }
+
+        // Gestion des horaires d'ouverture
+        let workingHoursIds = [];
+        if (workingHours && workingHours.length > 0) {
+            // Supprimer les anciens horaires
+            if (existingPharmacy.workingHours && existingPharmacy.workingHours.length > 0) {
+                await OpeningHours.deleteMany({ _id: { $in: existingPharmacy.workingHours } });
+            }
+
+            // Créer les nouveaux horaires
+            for (const hour of workingHours) {
+                if (hour.open) {
+                    const openingHour = new OpeningHours({
+                        day: hour.day,
+                        open: hour.open,
+                        opening: hour.opening,
+                        closing: hour.closing
+                    });
+                    await openingHour.save();
+                    workingHoursIds.push(openingHour._id);
+                }
+            }
+        }
+
+        // Mise à jour de la pharmacie avec le statut 'inactive'
+        const updateData = {
+            name,
+            address,
+            phoneNumber,
+            email,
+            licenseNumber,
+            siret,
+            status: 'inactive', // Statut passé à inactive après mise à jour
+            suspensionDate: suspensionDate ? new Date(suspensionDate) : null,
+            suspensionReason,
+            comentaire
+        };
+
+        if (locationId) {
+            updateData.location = locationId;
+        }
+
+        if (workingHoursIds.length > 0) {
+            updateData.workingHours = workingHoursIds;
+        }
+
+        const updatedPharmacy = await Pharmacy.findByIdAndUpdate(
+            id, 
+            updateData, 
+            { new: true, runValidators: true }
+        ).populate('location').populate('workingHours');
+
+        // Enregistrement des activités
+        await registerActivity('Pharmacie', user._id, "Pharmacie Mise à jour", `La pharmacie ${updatedPharmacy.name} a été mise à jour et son statut est maintenant inactif`);
+        
+        if (locationId) {
+            await registerActivity('Location', user._id, "Emplacement Mis à jour", `L'emplacement de la pharmacie ${updatedPharmacy.name} a été mis à jour`);
+        }
+
+        if (workingHoursIds.length > 0) {
+            await registerActivity('Horaires', user._id, "Horaires Mis à jour", `Les horaires d'ouverture de la pharmacie ${updatedPharmacy.name} ont été mis à jour`);
+        }
+
+        return res.status(200).json({
+            error: 0,
+            success: true,
+            message: 'Pharmacie mise à jour avec succès. Statut changé en inactif.',
+            user: user,
+            data: updatedPharmacy
+        });
+
+    } catch (error) {
+        console.error('Erreur lors de la mise à jour de la pharmacie:', error);
+        return res.status(500).json({ 
+            success: false,
+            error: error.message 
+        });
+    }
+};
 //exports
-module.exports = { authentificateUser, setProfilInfo, loadGeneralsInfo, loadAllActivities, setSettingsFont, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload };
+module.exports = { authentificateUser, setProfilInfo, loadGeneralsInfo, loadAllActivities, setSettingsFont, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload, pharmacieUpdate };

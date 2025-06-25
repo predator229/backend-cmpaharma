@@ -3,6 +3,11 @@ const mongoose = require('mongoose');
 const PharmacySchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   address: { type: String, required: true, trim: true },
+
+  city: { type: String, required: true, trim: true },
+  country: { type: String, required: true, trim: true },
+  comentaire: { type: String, default: null },
+
   logoUrl: { type: mongoose.Schema.Types.ObjectId, ref: 'Image', required: false },
   ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin', required: false },
   licenseNumber: { type: String, required: false }, //unique: true
@@ -15,7 +20,16 @@ const PharmacySchema = new mongoose.Schema({
   suspensionReason: { type: String, default: null },
   registerDate: { type: Date, default: Date.now },
   rating: { type: Number, min: 0, max: 5, default: null },
-  workingHours: [{type: mongoose.Schema.Types.ObjectId, ref: 'OpeningHour', required: false}],
+  workingHours: [{type: mongoose.Schema.Types.ObjectId, ref: 'OpeningHours', required: false}],
+
+  isValidated: { type: Boolean, default: false },
+
+  documents: {
+    license: { type: mongoose.Schema.Types.ObjectId, ref: 'File' },
+    idDocument: { type: mongoose.Schema.Types.ObjectId, ref: 'File' },
+    insurance: { type: mongoose.Schema.Types.ObjectId, ref: 'File' }
+  },
+
 }, {
   timestamps: true
 });

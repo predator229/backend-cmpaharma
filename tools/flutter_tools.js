@@ -157,10 +157,11 @@ const getTheCurrentUserOrFailed = async (req, res) => {
                 return pharmacy;
             });
        }
+        
     }
+    var statuss = the_user.pharmaciesManaged.map( function (pharm) { return pharm.status; });
 
-     //to use after to save new user
-    if (!the_user) { //process.env.NODE_ENV == 'development') 
+    if (!the_user && process.env.NODE_ENV == 'development') {
         const result = await getUserInfoByUUID(uid, type);
         if (result.status !== 200) {
             return {error:1};
@@ -332,7 +333,8 @@ const getTheCurrentUserOrFailed = async (req, res) => {
             await the_user.save();
         }
     }
-    return {error : the_user ? 0 : 1, the_user:the_user, status:200};
+
+    return {error : the_user ? 0 : 1, the_user:the_user, onlyShowListPharm :  statuss.includes('pending'), status:200};
 };
 const registerActivity = async (type, id, title, description) => {
     const activity = new Activity({
