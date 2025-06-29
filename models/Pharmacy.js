@@ -4,8 +4,8 @@ const PharmacySchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   address: { type: String, required: true, trim: true },
 
-  city: { type: String, required: true, trim: true },
-  country: { type: String, required: true, trim: true },
+  city: { type: String, required: false, trim: true },
+  country: { type: String, required: false, trim: true },
   comentaire: { type: String, default: null },
 
   logoUrl: { type: mongoose.Schema.Types.ObjectId, ref: 'Image', required: false },

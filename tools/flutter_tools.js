@@ -142,7 +142,14 @@ const getTheCurrentUserOrFailed = async (req, res) => {
         ])
      ): false;
 
-    if (the_user.groups && the_user.groups.map(p => registerActivity.code).includes('pharmacist-owner') && the_user.pharmaciesManaged && the_user.pharmaciesManaged.length > 0) {
+    if (
+        the_user.groups &&
+        ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].some(role =>
+            the_user.groups.some(g => g.code === role)
+        ) &&
+        the_user.pharmaciesManaged &&
+        the_user.pharmaciesManaged.length > 0
+    ) {
        if (typeof the_user.pharmaciesManaged[0] === 'object' && the_user.pharmaciesManaged[0].workingHours !== undefined) {
             the_user.pharmaciesManaged = the_user.pharmaciesManaged.map(async function (pharmacy) { 
                 pharmacy.orders = await Order.find({ pharmacy_id: pharmacy._id, status: 'pending' })
@@ -159,7 +166,7 @@ const getTheCurrentUserOrFailed = async (req, res) => {
        }
         
     }
-    var statuss = the_user.pharmaciesManaged.map( function (pharm) { return pharm.status; });
+    var statuss = Array.isArray(the_user?.pharmaciesManaged) ? the_user.pharmaciesManaged.map(function (pharm) { return pharm.status; }) : [];
 
     if (!the_user && process.env.NODE_ENV == 'development') {
         const result = await getUserInfoByUUID(uid, type);
@@ -314,7 +321,7 @@ const getTheCurrentUserOrFailed = async (req, res) => {
                     ] }
                 ]);
             }
-            await registerActivity( type == 'deliver' ? "Deliver" : (the_user.role == 'pharmacist-owner' ? 'Pharmacist Owner' : 'Administrateur'), the_user._id, "New user registed", "");
+            await registerActivity( type == 'deliver' ? "Deliver" : (the_user.role == 'manager_pharmacy' ? 'Pharmacist Owner' : 'Administrateur'), the_user._id, "New user registed", "");
         } else {
             if ( uidObj && !the_user.uids.includes(uidObj._id)) {
                 the_user.uids.push(uidObj._id);

@@ -11,7 +11,20 @@
       "dashboard.export"
     ]
   },
-   {
+  {
+    "module": "pharmacies",
+    "label": "Gestion des pharmacies",
+    "plateform": "Pharmacy",
+    "description": "Liste des pharmacies, création, configuration et export des pharmacies",
+    "createdBy": "System",
+    "permissions": [
+      "pharmacies.view",
+      "pharmacies.create",
+      "pharmacies.edit",
+      "pharmacies.export"
+    ]
+  },
+  {
     "module": "paiements",
     "label": "Suivi des paiements",
     "plateform": "Admin",
@@ -80,8 +93,8 @@
       "inventaire.entrepot.view",
       "inventaire.entrepot.edit",
       "inventaire.entrepot.export",
-      "inventaire.commandes_reçues.view",
-      "inventaire.commandes_reçues.export"
+      "inventaire.commandes_recues.view",
+      "inventaire.commandes_recues.export"
     ]
   },
   {
@@ -274,19 +287,19 @@
     ]
   },
   {
-    "module": "pharmacies",
+    "module": "pharmacies_admin",
     "label": "Gestion des pharmacies",
     "plateform": "Admin",
     "description": "Création, suspension, audit, stats, et configuration des pharmacies partenaires",
     "createdBy": "System",
     "permissions": [
-      "pharmacies.view",
-      "pharmacies.create",
-      "pharmacies.edit",
-      "pharmacies.suspend",
-      "pharmacies.audit",
-      "pharmacies.stats",
-      "pharmacies.export"
+      "pharmacies_admin.view",
+      "pharmacies_admin.create",
+      "pharmacies_admin.edit",
+      "pharmacies_admin.suspend",
+      "pharmacies_admin.audit",
+      "pharmacies_admin.stats",
+      "pharmacies_admin.export"
     ]
   },
   {
@@ -311,12 +324,12 @@
     "module": "pharmacie_info",
     "label": "Informations des pharmacies",
     "plateform": "Admin",
-    "description": "Infos pharmacie",
+    "description": "Consultation et modification des informations des pharmacies",
     "createdBy": "System",
     "permissions": [
-      "pharmacie_infos.view",
-      "pharmacie_infos.edit",
-      "pharmacie_infos.horaires"
+      "pharmacie_info.view",
+      "pharmacie_info.edit",
+      "pharmacie_info.horaires"
     ]
   },
   {

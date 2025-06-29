@@ -294,7 +294,7 @@ const pharmacieList = async (req, res) => {
             ];
         }
         let pharmacies =  [];
-        if (user?.groups?.some(g => ['pharmacist-owner', 'pharmacist-manager'].includes(g.code))) {
+        if (user?.groups?.some(g => ['manager_pharmacy', 'pharmacien','preparateur', 'caissier', 'consultant'].includes(g.code))) {
             query._id = { $in: user.pharmaciesManaged.map(pharm => pharm._id) };
             pharmacies = await Pharmacy.find(query).populate('location').lean();
         }else{
