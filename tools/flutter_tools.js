@@ -168,7 +168,7 @@ const getTheCurrentUserOrFailed = async (req, res) => {
     }
     var statuss = Array.isArray(the_user?.pharmaciesManaged) ? the_user.pharmaciesManaged.map(function (pharm) { return pharm.status; }) : [];
 
-    if (!the_user && process.env.NODE_ENV == 'development') {
+    if (!the_user ) { //&& process.env.NODE_ENV == 'development'
         const result = await getUserInfoByUUID(uid, type);
         if (result.status !== 200) {
             return {error:1};
