@@ -195,7 +195,7 @@ const checkPharmacyOwnerInfo = async (req, res) => {
             await setups_base.save();
             await registerActivity('Genaral Settings', setups_base._id, "Nouveau parametres generals ajoute", "Des parametres generaux de utilisateur ont ete crees");
 
-            var groups = await Group.find({code:'pharmacist-owner', plateform: "Pharmacy" });
+            var groups = await Group.find({code:'manager_pharmacy', plateform: "Pharmacy" });
             
             the_user = new Admin({
                 uids: [uidObj._id],
@@ -225,7 +225,7 @@ const checkPharmacyOwnerInfo = async (req, res) => {
                         { path: 'permissions',  }
                     ] }
                 ]);
-            await registerActivity('Pharmacist-owner', the_user._id, "Nouveau utilisateur", "Un compte du pharmacien a ete cree!");
+            await registerActivity('manager_pharmacy', the_user._id, "Nouveau utilisateur", "Un compte du pharmacien a ete cree!");
         }
 
         if (the_user) {

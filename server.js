@@ -38,70 +38,162 @@ app.use(cors());
 app.use(helmet());
 
 async function seedPermissions() {
-  await Permission.deleteMany({});
-  await Permission.insertMany(datas_permission);
-
   console.log('✅ Permissions seeded!');
 }
 async function seedGroupsWithValidation() {
   try {
+    console.log('🔄 Starting groups seeding process...');
+    
+    // Clear and recreate permissions
+    await Permission.deleteMany({});
+    await Permission.insertMany(datas_permission);
+    console.log(`✅ ${datas_permission.length} permissions inserted`);
+
+    // Build permissions map for faster lookup
     const allPermissions = await Permission.find({});
     const permissionsMap = new Map();
 
-    allPermissions.forEach(p => {
-      if (Array.isArray(p.permissions)) {
-        p.permissions.forEach(code => permissionsMap.set(code, p._id));
-      } else if (p.code) {
-        permissionsMap.set(p.code, p._id);
+    allPermissions.forEach(permission => {
+      if (Array.isArray(permission.permissions)) {
+        // If permission has nested permissions array
+        permission.permissions.forEach(code => {
+          permissionsMap.set(code, permission._id);
+        });
+      } else if (permission.code) {
+        // If permission has a single code
+        permissionsMap.set(permission.code, permission._id);
       }
     });
 
+    console.log(`📋 Built permissions map with ${permissionsMap.size} entries`);
+
+    // Clear existing groups
+    await Group.deleteMany({});
+    console.log('🗑️ Existing groups cleared');
+
+    // Read groups data
     const groupsData = JSON.parse(fss.readFileSync('groups_all.json', 'utf8'));
+    console.log(`📖 Loaded ${groupsData.length} groups from file`);
+
+    let createdCount = 0;
+    let updatedCount = 0;
+    let errorCount = 0;
 
     for (const group of groupsData) {
-      let permissionIds = [];
-      if (group.permissions === "ALL") {
-        permissionIds = allPermissions.map(p => p._id);
-      } else if (Array.isArray(group.permissions)) {
-        permissionIds = group.permissions
-          .map(code => permissionsMap.get(code))
-          .filter(Boolean);
-        const missing = group.permissions.filter(code => !permissionsMap.has(code));
-        if (missing.length) console.warn(`⚠️ Group ${group.code} missing permissions:`, missing);
-      } else {
-        console.warn(`⚠️ Group ${group.code} invalid permissions field`);
-        continue;
-      }
+      try {
+        let permissionIds = [];
+        
+        // Handle permissions assignment
+        if (group.permissions === "ALL") {
+          permissionIds = allPermissions.map(p => p._id);
+          console.log(`🔓 Group ${group.code} assigned ALL permissions (${permissionIds.length})`);
+        } else if (Array.isArray(group.permissions)) {
+          permissionIds = group.permissions
+            .map(code => permissionsMap.get(code))
+            .filter(Boolean);
+          
+          // Check for missing permissions
+          const missing = group.permissions.filter(code => !permissionsMap.has(code));
+          if (missing.length > 0) {
+            console.warn(`⚠️ Group ${group.code} missing ${missing.length} permissions:`, missing);
+          }
+          
+          console.log(`📝 Group ${group.code} assigned ${permissionIds.length}/${group.permissions.length} permissions`);
+        } else {
+          console.warn(`⚠️ Group ${group.code} has invalid permissions field, skipping...`);
+          errorCount++;
+          continue;
+        }
 
-      const exists = await Group.findOne({ code: group.code });
-      if (!exists) {
-        await Group.create({
-          code: group.code,
-          name: group.name,
-          description: group.description,
-          isActive: group.isActive !== undefined ? group.isActive : true,
-          plateform: group.plateform,
-          permissions: permissionIds,
-          createdBy: group.createdBy || 'System'
-        });
-        console.log(`✅ Group ${group.code} created`);
-      } else {
-        await Group.findOneAndUpdate(
-          { code: group.code },
-          {
+        // Check if group already exists
+        const existingGroup = await Group.findOne({ code: group.code });
+        
+        if (!existingGroup) {
+          // Create new group
+          await Group.create({
+            code: group.code,
             name: group.name,
             description: group.description,
-            isActive: group.isActive !== undefined ? group.isActive : exists.isActive,
+            isActive: group.isActive !== undefined ? group.isActive : true,
             plateform: group.plateform,
-            permissions: permissionIds
-          },
-          { new: true }
-        );
-        console.log(`🔄 Group ${group.code} updated`);
+            permissions: permissionIds,
+            createdBy: group.createdBy || 'System'
+          });
+          console.log(`✅ Group ${group.code} created successfully`);
+          createdCount++;
+        } else {
+          // Update existing group
+          await Group.findOneAndUpdate(
+            { code: group.code },
+            {
+              name: group.name,
+              description: group.description,
+              isActive: group.isActive !== undefined ? group.isActive : existingGroup.isActive,
+              plateform: group.plateform,
+              permissions: permissionIds,
+              updatedAt: new Date()
+            },
+            { new: true }
+          );
+          console.log(`🔄 Group ${group.code} updated successfully`);
+          updatedCount++;
+        }
+      } catch (groupError) {
+        console.error(`❌ Error processing group ${group.code}:`, groupError.message);
+        errorCount++;
       }
     }
+
+    // Summary
+    console.log('\n📊 Seeding Summary:');
+    console.log(`✅ Created: ${createdCount} groups`);
+    console.log(`🔄 Updated: ${updatedCount} groups`);
+    console.log(`❌ Errors: ${errorCount} groups`);
+    console.log(`📋 Total permissions available: ${allPermissions.length}`);
+    
+    if (errorCount === 0) {
+      console.log('🎉 Groups seeding completed successfully!');
+    } else {
+      console.log('⚠️ Groups seeding completed with some errors.');
+    }
+
   } catch (error) {
-    console.error('❌ Error in seedGroupsWithValidation:', error);
+    console.error('❌ Fatal error in seedGroupsWithValidation:', error);
+    throw error;
+  }
+}
+
+// Optional: Add validation function to verify seeding results
+async function validateSeeding() {
+  try {
+    const totalGroups = await Group.countDocuments();
+    const totalPermissions = await Permission.countDocuments();
+    const activeGroups = await Group.countDocuments({ isActive: true });
+    
+    console.log('\n🔍 Validation Results:');
+    console.log(`📊 Total groups in DB: ${totalGroups}`);
+    console.log(`🔓 Total permissions in DB: ${totalPermissions}`);
+    console.log(`✅ Active groups: ${activeGroups}`);
+    
+    // Check for groups without permissions
+    const groupsWithoutPermissions = await Group.find({ 
+      permissions: { $size: 0 } 
+    }).select('code name');
+    
+    if (groupsWithoutPermissions.length > 0) {
+      console.warn('⚠️ Groups without permissions:', 
+        groupsWithoutPermissions.map(g => g.code)
+      );
+    }
+    
+    return {
+      totalGroups,
+      totalPermissions,
+      activeGroups,
+      groupsWithoutPermissions: groupsWithoutPermissions.length
+    };
+  } catch (error) {
+    console.error('❌ Error in validation:', error);
     throw error;
   }
 }
@@ -137,41 +229,6 @@ async function importData() {
     }
 }
 
-// const generateActivity = () => {
-//   const types = ['order', 'pharmacy', 'payment', 'user', 'delivery'];
-//   // const types = ['login', 'logout', 'order_created', 'order_updated', 'pharmacy_updated', 'profile_updated'];
-//   const users = ['admin', 'deliver', 'customer', 'pharmacy_owner'];
-//   return {
-//     type: faker.helpers.arrayElement(types),
-//     title: faker.lorem.sentence(),
-//     userId: uuidv4(),
-//     id_object: uuidv4(),
-//     userType: faker.helpers.arrayElement(users),
-//     description: faker.lorem.sentence(),
-//     createdAt: faker.date.recent({ days: 60 })
-//   };
-// };
-
-// const seedActivities = async (count) => {
-//   try {
-//     await Activity.deleteMany({});
-//     console.log('Cleared existing activities');
-
-//     const activities = [];
-//     for (let i = 0; i < count; i++) {
-//       activities.push(generateActivity());
-//       if ((i + 1) % 10 === 0 || i === count - 1) {
-//         console.log(`Generated ${i + 1} of ${count} activities`);
-//       }
-//     }
-
-//     await Activity.insertMany(activities);
-//     console.log(`Successfully seeded ${count} activities`);
-//   } catch (error) {
-//     console.error('Error seeding activities:', error);
-//   }
-// };
-
 async function loadModels(directory) {
     const models = {};
     try {
@@ -199,10 +256,10 @@ const connectWithRetry = () => {
     .then(async () => {
       if (process.env.NODE_ENV == 'development') { console.log(`✅ MongoDB connecté avec succès`); }
 
-        if (process.env.NODE_ENV == 'developpement') {
+        // if (process.env.NODE_ENV == 'developpement') {
           await importData();
           console.log('✅ Importation des données terminée.');
-        }
+        // }
         app.use('/deliver/api', deliverRoutes);
         app.use('/admin/api', adminRoutes);
 
@@ -236,6 +293,6 @@ const connectWithRetry = () => {
         console.error('❌ Erreur de connexion MongoDB :', err);
         setTimeout(connectWithRetry, 5000);
     });
-  }
+}
   connectWithRetry();
 
