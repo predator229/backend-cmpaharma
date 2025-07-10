@@ -25,9 +25,10 @@ const PharmacySchema = new mongoose.Schema({
   isValidated: { type: Boolean, default: false },
 
   documents: {
-    license: { type: mongoose.Schema.Types.ObjectId, ref: 'File' },
-    idDocument: { type: mongoose.Schema.Types.ObjectId, ref: 'File' },
-    insurance: { type: mongoose.Schema.Types.ObjectId, ref: 'File' }
+    logo: { type: mongoose.Schema.Types.ObjectId, ref: 'File' , required: false},
+    license: { type: mongoose.Schema.Types.ObjectId, ref: 'File', required: false},
+    idDocument: { type: mongoose.Schema.Types.ObjectId, ref: 'File', required: false},
+    insurance: { type: mongoose.Schema.Types.ObjectId, ref: 'File', required: false},
   },
 
 }, {

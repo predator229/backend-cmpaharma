@@ -12,6 +12,10 @@ const Activity = require('@models/Activity');
 const Order = require('@models/Order');
 const OpeningHours = require('@models/OpeningHours');
 const Location = require('@models/Location');
+const File = require('@models/File');
+const { model } = require('mongoose');
+const fs = require('fs');
+const { error } = require('console');
 
 const authentificateUser = async (req, res) => {
     try {
@@ -130,7 +134,6 @@ const loadGeneralsInfo = async (req, res) => {
         }
         else { percentIncreasePharmacies = 100; }
 
-        // Récupérer les 10 dernières activités (toutes admins confondues), triées par date décroissante
         const recentActivities = await Activity.find({})
             .sort({ "created_at.date": -1 })
             .limit(5);
@@ -253,7 +256,7 @@ const setSettingsFont = async (req, res) => {
         }
         setups.font_family = font;
         await setups.save();
-        await registerActivity('General Settings', user._id, "Parametre generals modifier", "Les parametres generaux de l'utilisateur ont ete modifies pour l\'utilisateur "+user.name);
+        await registerActivity('General Settings', setups._id, user._id,  "Parametre generals modifier", "Les parametres generaux de l'utilisateur ont ete modifies pour l\'utilisateur "+user.name);
 
         user.setups = setups;
 
@@ -330,7 +333,18 @@ const pharmacieDetails = async (req, res) => {
         user = the_admin.the_user;
         user.photoURL =  user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
 
-        let pharmacy = await Pharmacy.findById(id);
+        let pharmacy = await Pharmacy.findById(id)
+                .populate([
+                    { path: 'location'},
+                    { path: 'workingHours'},
+                    { path: 'documents', populate: [
+                        { path: 'logo'},
+                        { path: 'license'},
+                        { path: 'idDocument'},
+                        { path: 'insurance'},
+                    ]},
+                ]);
+
         if (!pharmacy) { return res.status(404).json({ success: false, message: 'Pharmacie non trouvée' }); }
         pharmacy.orders = await Order.find({ pharmacy_id: pharmacy._id, status: 'pending' })
                                         .populate('deliver_id')
@@ -342,7 +356,9 @@ const pharmacieDetails = async (req, res) => {
                                     .populate('products');
         pharmacy.revenue30days  = pharmacy.orders30days.reduce((total, order) => total + order.totalAmount, 0);
 
-        return res.status(200).json({'error':0, user: user, data: pharmacy });
+        pharmacy.logoUrl = pharmacy.logoUrl ?? pharmacy.documents.logo.url;
+
+        return res.status(200).json({'error':0, logoUrl:pharmacy.documents.logo.url ?? 'heh', data: pharmacy, user: user });
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }
@@ -373,8 +389,8 @@ const pharmacieNew = async (req, res) => {
 
         const pharmacy = new Pharmacy({ name, address, logoUrl, ownerId: req.user.id, licenseNumber, siret, phoneNumber, email, status: 'pending', location: location_._id });
         await pharmacy.save();
-        await registerActivity('Pharmacie', user._id, "Pharmacie Ajoute", "La pharmacie "+pharmacy.name+" a ete ajoute!");
-        await registerActivity('Location', user._id, "Emplacement Ajoute", "L\'emplacement de la pharmacie "+pharmacy.name+" a ete ajoute!");
+        await registerActivity('Pharmacie', pharmacy._id, user._id,  "Pharmacie Ajoute", "La pharmacie "+pharmacy.name+" a ete ajoute!");
+        await registerActivity('Location', pharmacy._id, user._id,  "Emplacement Ajoute", "L\'emplacement de la pharmacie "+pharmacy.name+" a ete ajoute!");
 
         return res.status(200).json({'error':0, success: true, user: user, data: pharmacy });
     } catch (error) {
@@ -405,14 +421,14 @@ const pharmacieEdit = async (req, res) => {
         // if (openingHours) pharmacy.openingHours = openingHours;
         
         await pharmacy.save();
-        await registerActivity('Pharmacie', user._id, "Pharmacie Modifiee", "Les informations de la pharmacie "+pharmacy.name+" a ete modifie!");
+        await registerActivity('Pharmacie', pharmacy._id, user._id,  "Pharmacie Modifiee", "Les informations de la pharmacie "+pharmacy.name+" a ete modifie!");
         if (location) {
             var theLoc = await Location.find({ _id: location._id });
                 if (theLoc && (theLoc.latitude !== location.latitude || theLoc.longitude !== location.longitude)) {
                 theLoc.latitude = theLoc.latitude;
                 theLoc.longitude = theLoc.longitude;
                 await theLoc.save();
-                await registerActivity('Location', user._id, "Emplacement Modifie", "L\'emplacement de la pharmacie "+pharmacy.name+" a ete modifie!");
+                await registerActivity('Location', pharmacy._id, user._id,  "Emplacement Modifie", "L\'emplacement de la pharmacie "+pharmacy.name+" a ete modifie!");
             }
         }
         return res.status(200).json({'error':0, success: true, user: user, data: pharmacy });
@@ -461,7 +477,7 @@ const pharmacieApprove = async (req, res) => {
           
         pharmacy.status = 'active';
         await pharmacy.save();
-        await registerActivity('Pharmacie', user._id, "Pharmacie Modifiee", "Le statut de la pharmacie "+pharmacy.name+" a ete modifie en "+ pharmacy.status);
+        await registerActivity('Pharmacie', pharmacy._id, user._id, "Pharmacie Modifiee", "Le statut de la pharmacie "+pharmacy.name+" a ete modifie en "+ pharmacy.status);
       
         return res.status(200).json({'error':0, success: true,user: user, data: pharmacy });
     } catch (error) {
@@ -490,7 +506,7 @@ const pharmacieSuspend= async (req, res) => {
         pharmacy.suspensionDate = new Date();
         pharmacy.suspensionReason = reason || 'Suspension administrative';
         await pharmacy.save();
-        await registerActivity('Pharmacie', user._id, "Pharmacie Modifiee", "Le statut de la pharmacie "+pharmacy.name+" a ete modifie en "+ pharmacy.status);
+        await registerActivity('Pharmacie', pharmacy._id, user._id,  "Pharmacie Modifiee", "Le statut de la pharmacie "+pharmacy.name+" a ete modifie en "+ pharmacy.status);
 
         return res.status(200).json({'error':0, success: true,user: user, data: pharmacy });
     } catch (error) {
@@ -519,7 +535,7 @@ const pharmacieActive= async (req, res) => {
         pharmacy.suspensionDate = null;
         pharmacy.suspensionReason = null;
         await pharmacy.save();
-        await registerActivity('Pharmacie', user._id, "Pharmacie Modifiee", "Le statut de la pharmacie "+pharmacy.name+" a ete modifie en "+ pharmacy.status);
+        await registerActivity('Pharmacie', pharmacy._id, user._id,  "Pharmacie Modifiee", "Le statut de la pharmacie "+pharmacy.name+" a ete modifie en "+ pharmacy.status);
 
         return res.status(200).json({'error':0,success: true, user: user, data: pharmacy });
     } catch (error) {
@@ -547,7 +563,7 @@ const pharmacieReject= async (req, res) => {
         pharmacy.status = 'rejected';
         pharmacy.suspensionReason = reason || 'Demande rejetée';
         await pharmacy.save();
-        await registerActivity('Pharmacie', user._id, "Pharmacie Modifiee", "Le statut de la pharmacie "+pharmacy.name+" a ete modifie en "+ pharmacy.status);
+        await registerActivity('Pharmacie', pharmacy._id, user._id,  "Pharmacie Modifiee", "Le statut de la pharmacie "+pharmacy.name+" a ete modifie en "+ pharmacy.status);
             
         return res.status(200).json({'error':0,success: true, user: user, data: pharmacy });
     } catch (error) {
@@ -599,6 +615,85 @@ const pharmacieDocumentsDownload = async (req, res) => {
     }
 };
 
+const pharmacieDocumentsUpload = async (req, res) => {
+    try {
+        const { type_, pharmacyId, uid } = req.body;
+        const file = req.file;
+
+        const missingFields = [];
+        if (!file) missingFields.push('file');
+        if (!type_ || !['logo', 'license', 'idDocument', 'insurance'].includes(type_)) missingFields.push('type_');
+        if (!pharmacyId) missingFields.push('pharmacyId');
+        if (!uid) missingFields.push('uid');
+
+        if (missingFields.length > 0) {
+            return res.status(400).json({ message: 'Missing required fields', missingFields });
+        }
+
+        req.body.type = "admin"
+
+        const the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error) return res.status(404).json({ message: 'User not found' });
+
+        const user = the_admin.the_user;
+        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        const pharmacy = await Pharmacy.findById(pharmacyId);
+        if (!pharmacy) return res.status(404).json({ error: 1, success: false, message: 'Pharmacie non trouvée' });
+
+        const thetime = Date.now().toString();
+        const extension = file.originalname ? file.originalname.split('.').pop() : 'png';
+
+        const existant = await File.find({
+            fileType: type_,
+            'linkedTo.model': 'Pharmacies',
+            'linkedTo.objectId': pharmacy._id
+        });
+        if (existant.length > 0) {
+            await File.deleteMany({
+                fileType: type_,
+                'linkedTo.model': 'Pharmacies',
+                'linkedTo.objectId': pharmacy._id
+            });
+            for (const f of existant) {
+                if (f.url && fs.existsSync(f.url)) {
+                    try { fs.unlinkSync(f.url); } catch (e) {}
+                }
+            }
+        }
+
+        const file_ = new File({
+            originalName: file.originalname ?? ("new_file_" + thetime),
+            fileName: `${pharmacy.name}_${type_}_${thetime}.${extension}`,
+            fileType: type_,
+            fileSize: file.size,
+            url: file.path,
+            extension: extension,
+            uploadedBy: user._id,
+            linkedTo: { model: "Pharmacies", objectId: pharmacy._id, },
+            tags: [],
+            isPrivate: type_ === 'logo',
+            meta: {
+                width: file.width ?? 200,
+                height: file.height ?? 200,
+                pages: file.page ?? 1
+            }
+        });
+
+        await file_.save();
+
+        pharmacy.documents = pharmacy.documents || {};
+        pharmacy.documents[type_] = file_._id;
+        await pharmacy.save();
+
+        await registerActivity('Pharmacie', pharmacy._id, user._id, "Document Upload", `Document ${type_} pour la pharmacie ${pharmacy.name} uploadé avec succès par ${user.name}`);
+
+        res.json({ error: 0, success: true, user: user, data: pharmacy, message: `Document ${type_} pour la pharmacie ${pharmacy.name} uploadé avec succès sur le serveur` });
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+};
+
 const pharmacieUpdate = async (req, res) => {
     try {
         const { 
@@ -606,7 +701,6 @@ const pharmacieUpdate = async (req, res) => {
             location, workingHours, suspensionDate, suspensionReason, comentaire 
         } = req.body;
 
-        // Validation des champs requis
         if (!id || !name || !address || !phoneNumber || !email || !licenseNumber || !siret) {
             return res.status(400).json({ 
                 success: false,
@@ -614,7 +708,6 @@ const pharmacieUpdate = async (req, res) => {
             });
         }
 
-        // Vérification de l'utilisateur
         var the_admin = await getTheCurrentUserOrFailed(req, res);
         if (the_admin.error) { 
             return res.status(404).json({ message: 'User not found' }); 
@@ -623,16 +716,15 @@ const pharmacieUpdate = async (req, res) => {
         const user = the_admin.the_user;
         user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
 
-        // Recherche de la pharmacie existante
         const existingPharmacy = await Pharmacy.findById(id);
         if (!existingPharmacy) {
             return res.status(404).json({
+                error : 1,
                 success: false,
                 message: 'Pharmacie non trouvée'
             });
         }
 
-        // Vérification des doublons (excluant la pharmacie actuelle)
         const duplicatePharmacy = await Pharmacy.findOne({ 
             _id: { $ne: id },
             $or: [{ email }, { licenseNumber }, { siret }] 
@@ -640,37 +732,34 @@ const pharmacieUpdate = async (req, res) => {
         
         if (duplicatePharmacy) {
             return res.status(400).json({
+                error : 1,
                 success: false,
                 message: 'Une autre pharmacie avec cet email, numéro de licence ou SIRET existe déjà'
             });
         }
 
-        // Gestion de la localisation
+        var message = existingPharmacy.status == 'pending' ? 'Pharmacie mise à jour avec succès. Nos administrateurs vont procéder à la vérification des informations fournies. Vous serez notifié par e-mail une fois la validation effectuée.' : 'Pharmacie mise à jour avec succès.';
+
         let locationId = existingPharmacy.location;
         if (location && location.latitude && location.longitude) {
             if (locationId) {
-                // Mise à jour de la localisation existante
                 await Location.findByIdAndUpdate(locationId, {
                     latitude: location.latitude,
                     longitude: location.longitude
                 });
             } else {
-                // Création d'une nouvelle localisation
                 const newLocation = new Location(location);
                 await newLocation.save();
                 locationId = newLocation._id;
             }
         }
 
-        // Gestion des horaires d'ouverture
         let workingHoursIds = [];
         if (workingHours && workingHours.length > 0) {
-            // Supprimer les anciens horaires
             if (existingPharmacy.workingHours && existingPharmacy.workingHours.length > 0) {
                 await OpeningHours.deleteMany({ _id: { $in: existingPharmacy.workingHours } });
             }
 
-            // Créer les nouveaux horaires
             for (const hour of workingHours) {
                 if (hour.open) {
                     const openingHour = new OpeningHours({
@@ -685,7 +774,18 @@ const pharmacieUpdate = async (req, res) => {
             }
         }
 
-        // Mise à jour de la pharmacie avec le statut 'inactive'
+        const requiredDoc = ['license', 'idDocument', 'insurance'];
+        for (const element of requiredDoc) {
+            var doc = existingPharmacy.documents[element]  ? await File.findOne({_id: existingPharmacy.documents[element] }) : null;
+            if (!doc || doc == null ) {
+                return res.status(400).json({
+                    error : 1,
+                    success: false,
+                    message: `Le document ${element} est requis`
+                });
+            }
+        }
+
         const updateData = {
             name,
             address,
@@ -693,7 +793,7 @@ const pharmacieUpdate = async (req, res) => {
             email,
             licenseNumber,
             siret,
-            status: 'inactive', // Statut passé à inactive après mise à jour
+            status: 'inactive', 
             suspensionDate: suspensionDate ? new Date(suspensionDate) : null,
             suspensionReason,
             comentaire
@@ -713,21 +813,24 @@ const pharmacieUpdate = async (req, res) => {
             { new: true, runValidators: true }
         ).populate('location').populate('workingHours');
 
-        // Enregistrement des activités
-        await registerActivity('Pharmacie', user._id, "Pharmacie Mise à jour", `La pharmacie ${updatedPharmacy.name} a été mise à jour et son statut est maintenant inactif`);
+        await registerActivity('Pharmacie', updatedPharmacy._id, user._id, "Pharmacie Mise à jour", `La pharmacie ${updatedPharmacy.name} a été mise à jour et son statut est maintenant inactif`);
         
         if (locationId) {
-            await registerActivity('Location', user._id, "Emplacement Mis à jour", `L'emplacement de la pharmacie ${updatedPharmacy.name} a été mis à jour`);
+            await registerActivity('Location', updatedPharmacy._id, user._id, "Emplacement Mis à jour", `L'emplacement de la pharmacie ${updatedPharmacy.name} a été mis à jour`);
         }
 
         if (workingHoursIds.length > 0) {
-            await registerActivity('Horaires', user._id, "Horaires Mis à jour", `Les horaires d'ouverture de la pharmacie ${updatedPharmacy.name} ont été mis à jour`);
+            await registerActivity('Horaires', updatedPharmacy._id, user._id, "Horaires Mis à jour", `Les horaires d'ouverture de la pharmacie ${updatedPharmacy.name} ont été mis à jour`);
+        }
+
+        if (suspensionDate) {
+            await registerActivity('Pharmacie', updatedPharmacy._id, user._id, "Pharmacie Suspendue", `La pharmacie ${updatedPharmacy.name} a été suspendue pour la raison suivante : ${suspensionReason}`);
         }
 
         return res.status(200).json({
             error: 0,
             success: true,
-            message: 'Pharmacie mise à jour avec succès. Statut changé en inactif.',
+            message: message,
             user: user,
             data: updatedPharmacy
         });
@@ -740,5 +843,98 @@ const pharmacieUpdate = async (req, res) => {
         });
     }
 };
+const pharmacieWorkingsHours = async (req, res) => {
+    try {
+        const { id } = req.body;
+        if (!id) { return res.status(400).json({ message: 'Missing required fields' }); }
+
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error ) { return res.status(404).json({ message: 'User not found' }); }
+
+        user = the_admin.the_user;
+        user.photoURL =  user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        let pharmacy = await Pharmacy.findById(id);
+        if (!pharmacy) { return res.status(404).json({ success: false, message: 'Pharmacie non trouvée' }); }
+
+        var workingHours = [];
+        workingHours = pharmacy.workingHours != null && pharmacy.workingHours.length > 0 ? await OpeningHours.find({ _id: { $in: pharmacy.workingHours } }) : workingHours;
+
+        const daysOfWeek = [1,2,3,4,5,6,7];
+        for (let index = 0; index < daysOfWeek.length; index++) {
+            const element = daysOfWeek[index];
+            if (workingHours.find(each => each.day === daysOfWeek[index])) {
+                continue;
+            }else{
+                workingHours.push({
+                    day: daysOfWeek[index],
+                    open: false,
+                    opening: '08:00',
+                    closing: '18:00'
+                });
+            }
+        }
+        workingHours.sort((a, b) => a.day - b.day);
+
+        return res.status(200).json({'error':0, user: user, data: workingHours });
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+};
+const pharmacieLocation = async (req, res) => {
+    try {
+        const { id } = req.body;
+        if (!id) { return res.status(400).json({ message: 'Missing required fields' }); }
+
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error ) { return res.status(404).json({ message: 'User not found' }); }
+
+        user = the_admin.the_user;
+        user.photoURL =  user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        let pharmacy = await Pharmacy.findById(id);
+        if (!pharmacy) { return res.status(404).json({ success: false, message: 'Pharmacie non trouvée' }); }
+
+        if (!pharmacy.location) {}
+        
+        return res.status(200).json({'error':0, user: user, data: workingHours });
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+};
+const pharmacieActivities = async (req, res) => {
+    try {
+        const { id } = req.body;
+        if (!id) { return res.status(400).json({ message: 'Missing required fields' }); }
+
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error ) { return res.status(404).json({ message: 'User not found' }); }
+
+        var user = the_admin.the_user;
+        user.photoURL =  user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        let pharmacy = await Pharmacy.findById(id);
+        if (!pharmacy) { return res.status(404).json({ success: false, message: 'Pharmacie non trouvée' }); }
+
+
+        const activities = await Activity.find({ id_object: pharmacy._id })
+            .sort({ created_at: -1 })
+            .limit(3);
+
+        const users = await Admin.find({ _id: { $in: activities.map(act => act.author) } }).lean();
+        const usersMap = {};
+        users.forEach(each => {
+            each.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(each.name || 'User')}&background=random&size=500`;
+            usersMap[each._id] = {
+                'name' : each._id.toString() == user._id.toString() ? 'Vous' : each.name+' '+each.surname,
+                'img' : each.photoURL
+            };
+        });
+        return res.status(200).json({'error':0, usersMap: usersMap, data: activities, user: user });
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+};
+
 //exports
-module.exports = { authentificateUser, setProfilInfo, loadGeneralsInfo, loadAllActivities, setSettingsFont, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload, pharmacieUpdate };
+module.exports = { authentificateUser, setProfilInfo, loadGeneralsInfo, loadAllActivities, setSettingsFont, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload, pharmacieUpdate, pharmacieDocumentsUpload, pharmacieWorkingsHours, pharmacieActivities };

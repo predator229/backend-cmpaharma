@@ -176,7 +176,7 @@ const checkPharmacyOwnerInfo = async (req, res) => {
                     title: phoneNumber.nationalNumber
                 });
                 await userPhone.save();
-                await registerActivity('Phone Number', userPhone._id, "Nouveau numero de telephone", "Un numero de telephone d'utilisateur a ete cree");
+                await registerActivity('Phone Number', userPhone._id, false, "Nouveau numero de telephone", "Un numero de telephone d'utilisateur a ete cree");
                 
                 the_user = { phone: userPhone._id };
             } else {
@@ -193,7 +193,7 @@ const checkPharmacyOwnerInfo = async (req, res) => {
                 isCollapse_menu: true
             });
             await setups_base.save();
-            await registerActivity('Genaral Settings', setups_base._id, "Nouveau parametres generals ajoute", "Des parametres generaux de utilisateur ont ete crees");
+            await registerActivity('Genaral Settings', setups_base._id, false, "Nouveau parametres generals ajoute", "Des parametres generaux de utilisateur ont ete crees");
 
             var groups = await Group.find({code:'manager_pharmacy', plateform: "Pharmacy" });
             
@@ -225,7 +225,7 @@ const checkPharmacyOwnerInfo = async (req, res) => {
                         { path: 'permissions',  }
                     ] }
                 ]);
-            await registerActivity('manager_pharmacy', the_user._id, "Nouveau utilisateur", "Un compte du pharmacien a ete cree!");
+            await registerActivity('manager_pharmacy', the_user._id, false, "Nouveau utilisateur", "Un compte du pharmacien a ete cree!");
         }
 
         if (the_user) {
