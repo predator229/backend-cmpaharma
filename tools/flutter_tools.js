@@ -122,17 +122,22 @@ const getUserInfoByUUID = async (uuid, type) => {
 };
 
 const getTheCurrentUserOrFailed = async (req, res) => {
-    const { uid, infos = {}, type = "deliver" } = req.body;
+    const { uid, infos = {}, type = "deliver", saveNewUser=false, tokenImp } = req.body;
+    
+     if (!uid) { return res.status(400).json({ error : 0, message: req.body});}
+
     let uidObj = await Uid.findOne({ uid: uid });
 
+    if (saveNewUser && tokenImp != "243786cgoqt789" ) { saveNewUser = false }
+
     let the_user = uidObj != null  ? (type == 'deliver' ? await Deliver.findOne({ uids: uidObj._id, disabled: false }) 
+
         .populate('country')
         .populate('phone')
         .populate('mobils') : 
         await Admin.findOne({ uids: uidObj._id }) 
         .populate([
             { path: 'country' },
-            { path: 'pharmaciesManaged' },
             { path: 'phone' },
             { path: 'mobils' },
             { path: 'setups' },
@@ -143,11 +148,13 @@ const getTheCurrentUserOrFailed = async (req, res) => {
      ): false;
 
     if (
-        the_user.groups &&
+        type != 'deliver' && the_user &&
+        Array.isArray(the_user.groups) &&
+        the_user.groups.length > 0 &&
         ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].some(role =>
             the_user.groups.some(g => g.code === role)
         ) &&
-        the_user.pharmaciesManaged &&
+        Array.isArray(the_user.pharmaciesManaged) &&
         the_user.pharmaciesManaged.length > 0
     ) {
        if (typeof the_user.pharmaciesManaged[0] === 'object' && the_user.pharmaciesManaged[0].workingHours !== undefined) {
@@ -168,7 +175,7 @@ const getTheCurrentUserOrFailed = async (req, res) => {
     }
     var statuss = Array.isArray(the_user?.pharmaciesManaged) ? the_user.pharmaciesManaged.map(function (pharm) { return pharm.status; }) : [];
 
-    if (!the_user ) { //&& process.env.NODE_ENV == 'development'
+    if (!the_user && saveNewUser ) { //&& process.env.NODE_ENV == 'development'
         const result = await getUserInfoByUUID(uid, type);
         if (result.status !== 200) {
             return {error:1};
@@ -321,7 +328,7 @@ const getTheCurrentUserOrFailed = async (req, res) => {
                     ] }
                 ]);
             }
-            await registerActivity( type == 'deliver' ? "Deliver" : (the_user.role == 'manager_pharmacy' ? 'Pharmacist Owner' : 'Administrateur'), the_user._id, "New user registed", "");
+            await registerActivity( type == 'deliver' ? "Deliver" : (the_user.role == 'manager_pharmacy' ? 'Pharmacist Owner' : 'Administrateur'), the_user._id, false, "New user registed", "");
         } else {
             if ( uidObj && !the_user.uids.includes(uidObj._id)) {
                 the_user.uids.push(uidObj._id);
@@ -343,12 +350,13 @@ const getTheCurrentUserOrFailed = async (req, res) => {
 
     return {error : the_user ? 0 : 1, the_user:the_user, onlyShowListPharm :  statuss.includes('pending'), status:200};
 };
-const registerActivity = async (type, id, title, description) => {
+const registerActivity = async (type, id, author=false, title, description) => {
     const activity = new Activity({
         type: type,
         id_object: id,
         title: title,
         description: description,
+        author: author ?? 'System',
     });
     await activity.save();
     return activity;

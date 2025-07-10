@@ -1,27 +1,27 @@
 const mongoose = require('mongoose');
 
 const FileSchema = new mongoose.Schema({
-  originalName: { type: String, required: true }, // Nom original du fichier uploadé
-  fileName: { type: String, required: true },     // Nom stocké (dans S3, local, etc.)
-  fileType: { type: String, required: true },     // MIME type (ex: image/png, application/pdf)
-  fileSize: { type: Number, required: true },     // Taille en octets
-  url: { type: String, required: true },          // URL d’accès (CDN, S3, etc.)
-  extension: { type: String, required: false },   // Exemple : "pdf", "jpg", "png"
+  originalName: { type: String, required: true }, 
+  fileName: { type: String, required: true },
+  fileType: { type: String, required: true },
+  fileSize: { type: Number, required: true },
+  url: { type: String, required: true },
+  extension: { type: String, required: false },
 
   uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin', required: false },
-  linkedTo: {                                      // Référence polymorphique si besoin
-    model: { type: String },                      // "Pharmacy", "User", etc.
+  linkedTo: {
+    model: { type: String },
     objectId: { type: mongoose.Schema.Types.ObjectId }
   },
 
-  tags: [{ type: String }],                       // Exemples : ["license", "idCard"]
-  isPrivate: { type: Boolean, default: false },   // Si le fichier est restreint
-  expiresAt: { type: Date, default: null },       // Pour les fichiers temporaires
+  tags: [{ type: String }],
+  isPrivate: { type: Boolean, default: false },
+  expiresAt: { type: Date, default: null },
 
-  meta: {                                          // Métadonnées techniques optionnelles
-    width: { type: Number },                      // Pour images
+  meta: {
+    width: { type: Number },
     height: { type: Number },
-    pages: { type: Number }                       // Pour PDFs
+    pages: { type: Number }
   }
 }, {
   timestamps: true

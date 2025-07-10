@@ -5,6 +5,7 @@ const activitySchema = new mongoose.Schema({
   id_object: { type: String, required: true },
   title: { type: String, required: true },
   description: { type: String, required: false },
+  author: {type: String, required: false },
 }, { timestamps: true });
   
 module.exports = mongoose.model('Activity', activitySchema);
