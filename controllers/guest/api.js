@@ -15,7 +15,7 @@ const { query } = require('express');
 
 const checkPharmacyInfo = async (req, res) => {
     try {
-        const { name, address, phone, email } = req.body;
+        const { name, address, phone, email, country, city } = req.body;
         let query = {};
         if (email) {
             query = { email: email };
@@ -25,13 +25,23 @@ const checkPharmacyInfo = async (req, res) => {
         if (phone) { query.phaneNumber = phone; }
         if (name) { query.name = name; }
         if (address) { query.address = address; }
+
+        const theCountrie = await Country.findOne({ name: country });
+        if (!theCountrie) {
+            return res.status(200).json({
+                error: 0,
+                continue: false,
+                exist: true,
+                errorMessage: 'Le pays n\'existe pas !.'
+            });
+        }
+
         var pharmaciesCount = await Pharmacy.countDocuments(query);
         return res.status(200).json({'error':0, exist: pharmaciesCount != 0, errorMessage: pharmaciesCount != 0 ? 'Un partenaire avec les informations entrees existe deja !' : '' });
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }
 };
-
 const checkPharmacyOwnerInfo = async (req, res) => {
     try {
         let {
@@ -42,11 +52,23 @@ const checkPharmacyOwnerInfo = async (req, res) => {
             pharmacy_email,
             owner_full_name,
             owner_email,
-            owner_phone
+            owner_phone,
+            country,
+            city
         } = req.body;
 
-        if (!pharmacy_name || !pharmacy_address || !pharmacy_phone || !pharmacy_email || !owner_email) {
+        if (!pharmacy_name || !pharmacy_address || !pharmacy_phone || !pharmacy_email || !owner_email || !country || !city) {
             return res.status(200).json({ error: 0, continue: false, errorMessage: 'Veuillez remplir toutes les informations nécessaires.' });
+        }
+
+        const theCountrie = await Country.findOne({ name: country });
+        if (!theCountrie) {
+            return res.status(200).json({
+                error: 0,
+                continue: false,
+                exist: true,
+                errorMessage: 'Le pays n\'existe pas !.'
+            });
         }
 
         type_account = parseInt(type_account);
@@ -86,7 +108,8 @@ const checkPharmacyOwnerInfo = async (req, res) => {
             name: pharmacy_name,
             address: pharmacy_address,
             phoneNumber: pharmacy_phone,
-            email: pharmacy_email
+            email: pharmacy_email,
+            country: theCountrie._id,
         });
 
         // Cas 1 : le propriétaire a déjà un compte

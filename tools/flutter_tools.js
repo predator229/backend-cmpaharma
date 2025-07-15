@@ -1,5 +1,4 @@
 require('dotenv').config();
-const nodemailer = require('nodemailer');
 const { getFirebaseApp } = require('@config/firebase');
 
 const Uid = require('@models/Uid');
@@ -13,6 +12,8 @@ const Admin = require('@models/Admin');
 const SetupBase = require('@models/SetupBase');
 const Order = require('@models/Order');
 const Activity = require('@models/Activity');
+
+const nodemailer = require('nodemailer');
 
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com', 
@@ -390,4 +391,32 @@ const generateUserResponse = async (user) => {
     };
   };
   
-module.exports = { getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse, getUserInfoByEmail, signUpUserWithEmailAndPassword, createUserAndSendEmailLink,deleteUserByEmail, registerActivity };
+const getListCountries = async (req, res) => {
+    try {
+        var toLoad = {};
+
+        if (req.body.search) {
+            if (req.body.search) {
+                toLoad.name = { $regex: req.body.search, $options: 'i' };
+            }
+        }
+        
+        const countriesArr = await Country.find(toLoad).sort({ name: 1 });
+        let countries = {};
+        countriesArr.forEach(country => {
+            countries[country._id ] = country;
+        });
+        let countriesIdText = [];
+        countriesArr.forEach(country => {
+            countriesIdText.push({
+                id: country._id,
+                text: `${country.emoji} ${country.name} (${country.code})`,
+            });
+        });
+
+        return res.status(200).json({ 'data': countries, 'dataArray': countriesArr, nameArray: countriesArr.map(c => c.name), codeArray: countriesArr.map(c => c.code), countriesIdText });
+    } catch (error) {
+        return res.status(500).json({ error: 'Failed to fetch countries', details: error.message });
+    }
+}
+module.exports = { getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse, getUserInfoByEmail, signUpUserWithEmailAndPassword, createUserAndSendEmailLink,deleteUserByEmail, registerActivity, getListCountries };
