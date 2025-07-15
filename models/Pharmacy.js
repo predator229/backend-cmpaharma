@@ -4,8 +4,8 @@ const PharmacySchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   address: { type: String, required: true, trim: true },
 
-  city: { type: String, required: false, trim: true },
-  country: { type: String, required: false, trim: true },
+  city: { type: String, required: true, trim: true },
+  country: { type: mongoose.Schema.Types.ObjectId, ref: 'Country', required: true },
   comentaire: { type: String, default: null },
 
   logoUrl: { type: mongoose.Schema.Types.ObjectId, ref: 'Image', required: false },
@@ -31,6 +31,14 @@ const PharmacySchema = new mongoose.Schema({
     insurance: { type: mongoose.Schema.Types.ObjectId, ref: 'File', required: false},
   },
 
+  deliveryZone: { type: mongoose.Schema.Types.ObjectId, ref: 'DeliveryZone', required: false, default: null },
+  cityBounds: { type: mongoose.Schema.Types.ObjectId, ref: 'ZoneCoordinates', required: false, default: null },
+  deliveryServices: {
+    homeDelivery: { type: Boolean, default: true },
+    pickupInStore: { type: Boolean, default: true },
+    expressDelivery: { type: Boolean, default: false },
+    scheduledDelivery: { type: Boolean, default: false }
+  },
 }, {
   timestamps: true
 });

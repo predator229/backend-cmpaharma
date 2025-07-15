@@ -1,7 +1,7 @@
 require('module-alias/register');
 const express = require('express');
 const { createAuthMiddleware } = require('@middlewares/auth');
-const {getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse, getUserInfoByEmail, signUpUserWithEmailAndPassword,createUserAndSendEmailLink,deleteUserByEmail} = require('@tools/flutter_tools');
+const {getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse, getUserInfoByEmail, signUpUserWithEmailAndPassword,createUserAndSendEmailLink,deleteUserByEmail, getListCountries} = require('@tools/flutter_tools');
 
 const { verifyFirebaseToken: deliververifyFirebaseToken, injectDeliverType } = createAuthMiddleware('admin');
 const { authentificateUser, setProfilInfo, loadGeneralsInfo, setSettingsFont, loadAllActivities, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload,pharmacieUpdate, pharmacieDocumentsUpload, pharmacieWorkingsHours, pharmacieActivities} = require('@controllers/admins/api');
@@ -65,4 +65,6 @@ router.post('/pharmacy-managment/pharmacies/documents/download', deliververifyFi
 router.post('/pharmacy-managment/pharmacies/upload-document', deliververifyFirebaseToken, upload.single('file'), pharmacieDocumentsUpload);
 router.post('/pharmacy-managment/pharmacies/update', deliververifyFirebaseToken, pharmacieUpdate);
 
+//tools
+router.post('/tools/get-countries-list' , getListCountries);
 module.exports = router;

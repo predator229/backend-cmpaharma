@@ -1,5 +1,9 @@
 require('module-alias/register');
+require('dotenv').config();
+
 const {getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse,registerActivity } = require('@tools/flutter_tools');
+const LocationBoundsService = require('@tools/LocationBoundsService');
+
 const { parsePhoneNumberFromString } = require('libphonenumber-js');
 const Uid = require('@models/Uid');
 const Country = require('@models/Country');
@@ -12,10 +16,26 @@ const Activity = require('@models/Activity');
 const Order = require('@models/Order');
 const OpeningHours = require('@models/OpeningHours');
 const Location = require('@models/Location');
+const DeliveryZone = require('@models/DeliveryZone');
+const ZoneCoordinates = require('@models/ZoneCoordinates');
 const File = require('@models/File');
+const Group = require('@models/Group');
+
 const { model } = require('mongoose');
 const fs = require('fs');
-const { error } = require('console');
+const { error, group } = require('console');
+
+const nodemailer = require('nodemailer');
+
+const transporter = nodemailer.createTransport({
+    host: 'smtp.gmail.com', 
+    port: 587,
+    secure: false,
+    auth: {
+        user: process.env.MAIL_USER, 
+        pass: process.env.MAIL_PASS,
+    },
+});
 
 const authentificateUser = async (req, res) => {
     try {
@@ -336,7 +356,13 @@ const pharmacieDetails = async (req, res) => {
         let pharmacy = await Pharmacy.findById(id)
                 .populate([
                     { path: 'location'},
+                    { path: 'country'},
                     { path: 'workingHours'},
+                    {path: 'deliveryZone', populate: [
+                        { path: 'coordinates', populate: [
+                            {path: 'points'},
+                        ]},
+                    ]},
                     { path: 'documents', populate: [
                         { path: 'logo'},
                         { path: 'license'},
@@ -365,8 +391,8 @@ const pharmacieDetails = async (req, res) => {
 };
 const pharmacieNew = async (req, res) => {
     try {
-        const { name, address, logoUrl, licenseNumber, siret, phoneNumber, email, location, workingHours, openingHours } = req.body;
-        if (!name || !address || !logoUrl || !licenseNumber  || !siret  || !phoneNumber  || !email  || !location || !workingHours || !openingHours ) { return res.status(400).json({ message: 'Missing required fields' }); }
+        const { name, address, logoUrl, licenseNumber, siret, phoneNumber, email, location, workingHours, openingHours, country, city } = req.body;
+        if (!name || !address || !logoUrl || !licenseNumber  || !siret  || !phoneNumber  || !email  || !location || !workingHours || !openingHours || !country || !city ) { return res.status(400).json({ message: 'Tous les champs obligatoires sont requis !' }); }
 
         var the_admin = await getTheCurrentUserOrFailed(req, res);
         if (the_admin.error ) { return res.status(404).json({ message: 'User not found' }); }
@@ -387,8 +413,29 @@ const pharmacieNew = async (req, res) => {
 
         // workingHours, openingHours
 
-        const pharmacy = new Pharmacy({ name, address, logoUrl, ownerId: req.user.id, licenseNumber, siret, phoneNumber, email, status: 'pending', location: location_._id });
+        const theCountrie = await Country.findOne({ name: country });
+        if (!theCountrie) {
+            return res.status(400).json({ message: 'Pays non trouvé' });
+        }
+
+        const pharmacy = new Pharmacy({ name, address, logoUrl, ownerId: req.user.id, licenseNumber, siret, phoneNumber, email, status: 'pending', location: location_._id, country: theCountrie._id, city:city });
         await pharmacy.save();
+        pharmacy.populate([
+            { path: 'location'},
+            { path: 'country'},
+            { path: 'workingHours'},
+            {path: 'deliveryZone', populate: [
+                { path: 'coordinates', populate: [{path: 'points'},]},
+
+            ]},
+            { path: 'documents', populate: [
+                { path: 'logo'},
+                { path: 'license'},
+                { path: 'idDocument'},
+                { path: 'insurance'},
+            ]},
+        ]);
+
         await registerActivity('Pharmacie', pharmacy._id, user._id,  "Pharmacie Ajoute", "La pharmacie "+pharmacy.name+" a ete ajoute!");
         await registerActivity('Location', pharmacy._id, user._id,  "Emplacement Ajoute", "L\'emplacement de la pharmacie "+pharmacy.name+" a ete ajoute!");
 
@@ -399,7 +446,7 @@ const pharmacieNew = async (req, res) => {
 };
 const pharmacieEdit = async (req, res) => {
     try {
-        const { id, name, address, logoUrl, phoneNumber, email, location, workingHours, openingHours } = req.body;
+        const { id, name, address, logoUrl, phoneNumber, email, location, workingHours, openingHours, country, city } = req.body;
         if (!id ) { return res.status(400).json({ message: 'Missing required fields' }); }
 
         var the_admin = await getTheCurrentUserOrFailed(req, res);
@@ -416,7 +463,13 @@ const pharmacieEdit = async (req, res) => {
         if (logoUrl) pharmacy.logoUrl = logoUrl;
         if (phoneNumber) pharmacy.phoneNumber = phoneNumber;
         if (email) pharmacy.email = email;
+        if (city) pharmacy.city = city;
         
+        if (country) {
+            theCountrie = await Country.findOne({ name: country });
+            pharmacy.country = theCountrie._id;
+        }
+
         // if (workingHours) pharmacy.workingHours = workingHours;
         // if (openingHours) pharmacy.openingHours = openingHours;
         
@@ -431,6 +484,23 @@ const pharmacieEdit = async (req, res) => {
                 await registerActivity('Location', pharmacy._id, user._id,  "Emplacement Modifie", "L\'emplacement de la pharmacie "+pharmacy.name+" a ete modifie!");
             }
         }
+
+        pharmacy.populate([
+            { path: 'location'},
+            { path: 'country'},
+            { path: 'workingHours'},
+            {path: 'deliveryZone', populate: [
+                { path: 'coordinates', populate: [{path: 'points'},]},
+                
+            ]},
+            { path: 'documents', populate: [
+                { path: 'logo'},
+                { path: 'license'},
+                { path: 'idDocument'},
+                { path: 'insurance'},
+            ]},
+        ]);
+
         return res.status(200).json({'error':0, success: true, user: user, data: pharmacy });
     } catch (error) {
         return res.status(500).json({ error: error.message });
@@ -479,6 +549,21 @@ const pharmacieApprove = async (req, res) => {
         await pharmacy.save();
         await registerActivity('Pharmacie', pharmacy._id, user._id, "Pharmacie Modifiee", "Le statut de la pharmacie "+pharmacy.name+" a ete modifie en "+ pharmacy.status);
       
+        pharmacy.populate([
+            { path: 'location'},
+            { path: 'country'},
+            { path: 'workingHours'},
+            {path: 'deliveryZone', populate: [
+                { path: 'coordinates', populate: [{path: 'points'},]},
+                
+            ]},
+            { path: 'documents', populate: [
+                { path: 'logo'},
+                { path: 'license'},
+                { path: 'idDocument'},
+                { path: 'insurance'},
+            ]},
+        ]);
         return res.status(200).json({'error':0, success: true,user: user, data: pharmacy });
     } catch (error) {
         return res.status(500).json({ error: error.message });
@@ -535,6 +620,21 @@ const pharmacieActive= async (req, res) => {
         pharmacy.suspensionDate = null;
         pharmacy.suspensionReason = null;
         await pharmacy.save();
+        pharmacy.populate([
+            { path: 'location'},
+            { path: 'country'},
+            { path: 'workingHours'},
+            {path: 'deliveryZone', populate: [
+                { path: 'coordinates', populate: [{path: 'points'},]},
+                
+            ]},
+            { path: 'documents', populate: [
+                { path: 'logo'},
+                { path: 'license'},
+                { path: 'idDocument'},
+                { path: 'insurance'},
+            ]},
+        ]);
         await registerActivity('Pharmacie', pharmacy._id, user._id,  "Pharmacie Modifiee", "Le statut de la pharmacie "+pharmacy.name+" a ete modifie en "+ pharmacy.status);
 
         return res.status(200).json({'error':0,success: true, user: user, data: pharmacy });
@@ -563,6 +663,21 @@ const pharmacieReject= async (req, res) => {
         pharmacy.status = 'rejected';
         pharmacy.suspensionReason = reason || 'Demande rejetée';
         await pharmacy.save();
+        pharmacy.populate([
+            { path: 'location'},
+            { path: 'country'},
+            { path: 'workingHours'},
+            {path: 'deliveryZone', populate: [
+                { path: 'coordinates', populate: [{path: 'points'},]},
+                
+            ]},
+            { path: 'documents', populate: [
+                { path: 'logo'},
+                { path: 'license'},
+                { path: 'idDocument'},
+                { path: 'insurance'},
+            ]},
+        ]);
         await registerActivity('Pharmacie', pharmacy._id, user._id,  "Pharmacie Modifiee", "Le statut de la pharmacie "+pharmacy.name+" a ete modifie en "+ pharmacy.status);
             
         return res.status(200).json({'error':0,success: true, user: user, data: pharmacy });
@@ -583,6 +698,22 @@ const pharmacieDocuments= async (req, res) => {
 
         const pharmacy = await Pharmacy.findById(id);
         if (!pharmacy) { return res.status(404).json({ success: false, message: 'Pharmacie non trouvée' });}
+
+        pharmacy.populate([
+            { path: 'location'},
+            { path: 'country'},
+            { path: 'workingHours'},
+            {path: 'deliveryZone', populate: [
+                { path: 'coordinates', populate: [{path: 'points'},]},
+                
+            ]},
+            { path: 'documents', populate: [
+                { path: 'logo'},
+                { path: 'license'},
+                { path: 'idDocument'},
+                { path: 'insurance'},
+            ]},
+        ]);
 
         // This is a placeholder for document retrieval logic
         // In a real application, this would retrieve documents from a storage service
@@ -606,6 +737,21 @@ const pharmacieDocumentsDownload = async (req, res) => {
         const pharmacy = await Pharmacy.findById(id);
         if (!pharmacy) { return res.status(404).json({ success: false, message: 'Pharmacie non trouvée' });}
 
+        pharmacy.populate([
+            { path: 'location'},
+            { path: 'country'},
+            { path: 'workingHours'},
+            {path: 'deliveryZone', populate: [
+                { path: 'coordinates', populate: [{path: 'points'},]},
+                
+            ]},
+            { path: 'documents', populate: [
+                { path: 'logo'},
+                { path: 'license'},
+                { path: 'idDocument'},
+                { path: 'insurance'},
+            ]},
+        ]);
         // This is a placeholder for document retrieval logic
         // In a real application, this would retrieve documents from a storage service
       
@@ -614,7 +760,6 @@ const pharmacieDocumentsDownload = async (req, res) => {
         return res.status(500).json({ error: error.message });
     }
 };
-
 const pharmacieDocumentsUpload = async (req, res) => {
     try {
         const { type_, pharmacyId, uid } = req.body;
@@ -685,25 +830,40 @@ const pharmacieDocumentsUpload = async (req, res) => {
         pharmacy.documents = pharmacy.documents || {};
         pharmacy.documents[type_] = file_._id;
         await pharmacy.save();
+        pharmacy.populate([
+            { path: 'location'},
+            { path: 'country'},
+            { path: 'workingHours'},
+            {path: 'deliveryZone', populate: [
+                { path: 'coordinates', populate: [{path: 'points'},]},
+                
+            ]},
+            { path: 'documents', populate: [
+                { path: 'logo'},
+                { path: 'license'},
+                { path: 'idDocument'},
+                { path: 'insurance'},
+            ]},
+        ]);
 
-        await registerActivity('Pharmacie', pharmacy._id, user._id, "Document Upload", `Document ${type_} pour la pharmacie ${pharmacy.name} uploadé avec succès par ${user.name}`);
+        await loadAllActivitiesAndSendMailAdmins(pharmacy, ['document'], user, type_);
 
         res.json({ error: 0, success: true, user: user, data: pharmacy, message: `Document ${type_} pour la pharmacie ${pharmacy.name} uploadé avec succès sur le serveur` });
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }
 };
-
 const pharmacieUpdate = async (req, res) => {
     try {
-        const { 
+        let { 
             id, name, address, phoneNumber, email, licenseNumber, siret, 
-            location, workingHours, suspensionDate, suspensionReason, comentaire 
+            location, workingHours, suspensionDate, suspensionReason, comentaire, country, city, deliveryZone 
         } = req.body;
 
-        if (!id || !name || !address || !phoneNumber || !email || !licenseNumber || !siret) {
+        if (!id || !name || !address || !phoneNumber || !email || !licenseNumber || !siret || !country || !city) {
             return res.status(400).json({ 
                 success: false,
+                error:0,
                 message: 'Tous les champs obligatoires doivent être renseignés' 
             });
         }
@@ -738,21 +898,79 @@ const pharmacieUpdate = async (req, res) => {
             });
         }
 
-        var message = existingPharmacy.status == 'pending' ? 'Pharmacie mise à jour avec succès. Nos administrateurs vont procéder à la vérification des informations fournies. Vous serez notifié par e-mail une fois la validation effectuée.' : 'Pharmacie mise à jour avec succès.';
-
-        let locationId = existingPharmacy.location;
-        if (location && location.latitude && location.longitude) {
-            if (locationId) {
-                await Location.findByIdAndUpdate(locationId, {
-                    latitude: location.latitude,
-                    longitude: location.longitude
-                });
-            } else {
-                const newLocation = new Location(location);
-                await newLocation.save();
-                locationId = newLocation._id;
+        const theCountrie = await Country.findOne({ _id: country });
+        let newCountrie = null;
+        if (!theCountrie) {
+            return res.status(400).json({
+                error : 1,
+                success: false,
+                message: `Le pays ${country} n'existe pas dans notre base de données`
+            });
+        }else{
+            if (existingPharmacy.country !== theCountrie._id) {
+                newCountrie = theCountrie._id;
             }
         }
+
+        let newCity = null;
+        if (city) {
+            if (existingPharmacy.city !== city) {
+                location = null;
+                if (existingPharmacy.location){ await Location.deleteMany({_id: existingPharmacy.location}); }
+                existingPharmacy.location = null;
+                existingPharmacy.city = city;
+                newCity = city;
+                if (existingPharmacy.cityBounds){ await ZoneCoordinates.deleteMany({_id: existingPharmacy.cityBounds}); }
+                existingPharmacy.cityBounds = null;
+                if (existingPharmacy.deliveryZone){ await DeliveryZone.deleteMany({_id: existingPharmacy.cityBounds}); }
+                existingPharmacy.deliveryZone = null;
+            }
+            // ici on creer le cityBounds
+        }
+        let existingLocation = null;
+        if (location) {
+            let verif = false;
+            existingLocation = existingPharmacy.location ? await Location.findById(existingPharmacy.location) : null;
+
+            if (existingLocation) {
+                if (location.latitude != existingLocation.latitude || location.longitude != existingLocation.longitude) { verif = true; }
+            }else{
+                verif = true;
+                existingLocation = new Location();
+            }
+            if (verif){
+                if (!location.latitude || !location.longitude) {
+                    return res.status(400).json({
+                        error : 1,
+                        success: false,
+                        message: 'Les coordonnées de localisation (latitude et longitude) sont requises pour modifier la localisation de la pharmacie'
+                    });
+                }
+                if((!existingPharmacy.city && !city) || (!existingPharmacy.country && !theCountrie)){
+                    return res.status(400).json({
+                        error : 1,
+                        success: false,
+                        message: 'La ville et le pays doivent être définis pour modifier la localisation de la pharmacie'
+                    });
+                }
+                const cccc = theCountrie ?? await Country.findById(existingPharmacy.country);
+                const locationService = new LocationBoundsService();
+                const isIt = cccc ? await locationService.isLocationInCityBounds({city : city ?? existingPharmacy.city, country : cccc}, location) : false;
+                if (!isIt || isIt.isInBounds === false) {
+                    return res.status(200).json({
+                        error : 1,
+                        success: false,
+                        message: isIt ? `La localisation de la pharmacie que vous essayer d\'enregistrer  n\'est pas dans les limites de la ville que vous avez defini pour la pharmacie (${isIt.cityName}). Veuillez vérifier les coordonnées.` : 'Erreur lors de la vérification des limites de la ville. Veuillez réessayer plus tard.'
+                    });
+                }
+                existingLocation.latitude = location.latitude;
+                existingLocation.longitude = location.longitude;
+            }
+        }
+        let updates = [];
+
+        var message = existingPharmacy.status == 'pending' ? 'Pharmacie mise à jour avec succès. Nos administrateurs vont procéder à la vérification des informations fournies. Vous serez notifié par e-mail une fois la validation effectuée.' : 'Pharmacie mise à jour avec succès.';
+
 
         let workingHoursIds = [];
         if (workingHours && workingHours.length > 0) {
@@ -786,6 +1004,53 @@ const pharmacieUpdate = async (req, res) => {
             }
         }
 
+        let newDeliveryZone = null;
+        if (deliveryZone) {
+            if ( !deliveryZone.coordinates || !deliveryZone.coordinates.points || deliveryZone.coordinates.points.length < 3) {
+            return res.status(400).json({
+                error: 1,
+                success: false,
+                message: 'Les coordonnées de la zone de livraison sont requises et doivent contenir au moins 3 points'
+            });
+            }
+
+            // Récupérer ou créer la zone de livraison
+            newDeliveryZone = existingPharmacy.deliveryZone ? await DeliveryZone.findById(existingPharmacy.deliveryZone) : new DeliveryZone();
+
+            // Récupérer ou créer les coordonnées de la zone
+            let zoneCoordinates;
+            if (newDeliveryZone.coordinates) {
+                zoneCoordinates = await ZoneCoordinates.findById(newDeliveryZone.coordinates);
+                // Supprimer les anciens points
+                if (zoneCoordinates && Array.isArray(zoneCoordinates.points) && zoneCoordinates.points.length) {
+                    await Location.deleteMany({ _id: { $in: zoneCoordinates.points } });
+                }
+            } else {
+                zoneCoordinates = new ZoneCoordinates();
+            }
+
+            // Créer et sauvegarder les nouveaux points
+            const newPoints = [];
+            for (const point of deliveryZone.coordinates.points) {
+            const newPoint = new Location({
+                latitude: point.latitude,
+                longitude: point.longitude
+            });
+            await newPoint.save();
+            newPoints.push(newPoint._id);
+            }
+            zoneCoordinates.points = newPoints;
+            await zoneCoordinates.save();
+
+            // Mettre à jour la zone de livraison
+            newDeliveryZone.coordinates = zoneCoordinates._id;
+            newDeliveryZone.type = deliveryZone.type || 'zone';
+            newDeliveryZone.radius = deliveryZone.radius || 20;
+            newDeliveryZone.isActive = typeof deliveryZone.isActive === 'boolean' ? deliveryZone.isActive : true;
+            newDeliveryZone.maxSelectionArea = deliveryZone.maxSelectionArea || 1000;
+            await newDeliveryZone.save();
+        }
+
         const updateData = {
             name,
             address,
@@ -793,18 +1058,56 @@ const pharmacieUpdate = async (req, res) => {
             email,
             licenseNumber,
             siret,
-            status: 'inactive', 
-            suspensionDate: suspensionDate ? new Date(suspensionDate) : null,
-            suspensionReason,
-            comentaire
+            status: existingPharmacy.status, 
+            // suspensionDate: suspensionDate ? new Date(suspensionDate) : null,
+            // suspensionReason,
+            country: theCountrie._id,
+            city,
+            comentaire,
+            deliveryZone: newDeliveryZone
         };
 
-        if (locationId) {
-            updateData.location = locationId;
+        if (existingLocation) {
+            await existingLocation.save();
+            updateData.location = existingLocation._id;
+            updates.push('location');
+        }
+        if (newCity){
+            updates.push('city');
+        }
+        if (address != existingPharmacy.address){
+            updates.push('address');
+        }
+        if (newCountrie){
+            updates.push('country');
+        }         
+        if (phoneNumber !== existingPharmacy.phoneNumber){
+            updates.push('phoneNumber');
+        }
+        if (email !== existingPharmacy.email){
+            updates.push('email');
+        }
+        if (licenseNumber !== existingPharmacy.licenseNumber){
+            updates.push('licenseNumber');
+        }
+        if (siret !== existingPharmacy.siret){
+            updates.push('siret');
+        }
+        
+        const setPending = ['city', 'country', 'phoneNumber', 'email', 'siret', 'licenseNumber', 'adress' ];
+
+        if (setPending.some(update => updates.includes(update)) || existingPharmacy.status == 'pending') {
+            updateData.status = 'inactive';
         }
 
+        if (newDeliveryZone) {
+            updateData.deliveryZone = newDeliveryZone._id;
+            updates.push('deliveryZone');
+        }
+        
         if (workingHoursIds.length > 0) {
             updateData.workingHours = workingHoursIds;
+            updates.push('workingsHours');
         }
 
         const updatedPharmacy = await Pharmacy.findByIdAndUpdate(
@@ -813,19 +1116,23 @@ const pharmacieUpdate = async (req, res) => {
             { new: true, runValidators: true }
         ).populate('location').populate('workingHours');
 
-        await registerActivity('Pharmacie', updatedPharmacy._id, user._id, "Pharmacie Mise à jour", `La pharmacie ${updatedPharmacy.name} a été mise à jour et son statut est maintenant inactif`);
-        
-        if (locationId) {
-            await registerActivity('Location', updatedPharmacy._id, user._id, "Emplacement Mis à jour", `L'emplacement de la pharmacie ${updatedPharmacy.name} a été mis à jour`);
-        }
+        await loadAllActivitiesAndSendMailAdmins(existingPharmacy, updates, user, '');
 
-        if (workingHoursIds.length > 0) {
-            await registerActivity('Horaires', updatedPharmacy._id, user._id, "Horaires Mis à jour", `Les horaires d'ouverture de la pharmacie ${updatedPharmacy.name} ont été mis à jour`);
-        }
-
-        if (suspensionDate) {
-            await registerActivity('Pharmacie', updatedPharmacy._id, user._id, "Pharmacie Suspendue", `La pharmacie ${updatedPharmacy.name} a été suspendue pour la raison suivante : ${suspensionReason}`);
-        }
+        updatedPharmacy.populate([
+            { path: 'location'},
+            { path: 'country'},
+            { path: 'workingHours'},
+            {path: 'deliveryZone', populate: [
+                { path: 'coordinates', populate: [{path: 'points'},]},
+                
+            ]},
+            { path: 'documents', populate: [
+                { path: 'logo'},
+                { path: 'license'},
+                { path: 'idDocument'},
+                { path: 'insurance'},
+            ]},
+        ]);
 
         return res.status(200).json({
             error: 0,
@@ -936,5 +1243,86 @@ const pharmacieActivities = async (req, res) => {
     }
 };
 
-//exports
+const loadAllActivitiesAndSendMailAdmins = async (updatedPharmacy, updates, user, extra = '') => {
+    let messageToSendToAdmin = `
+    <div style="font-family: Arial, sans-serif; color: #222;">
+        <p>
+            Certains éléments de la pharmacie <b style="color:#007bff;">${updatedPharmacy.name}</b> ont été mis à jour.
+        </p>
+        <br>
+        <b>Détails des modifications :</b>
+        <table style="border-collapse: collapse; margin-top: 10px;">
+            <tbody>
+                ${updates.includes('location') ? '<tr><td style="padding:6px 12px;border:1px solid #e0e0e0;">Emplacement</td><td style="padding:6px 12px;border:1px solid #e0e0e0;color:#28a745;">Mis à jour</td></tr>' : ''}
+                ${updates.includes('city') ? '<tr><td style="padding:6px 12px;border:1px solid #e0e0e0;">Ville</td><td style="padding:6px 12px;border:1px solid #e0e0e0;color:#28a745;">Mis à jour</td></tr>' : ''}
+                ${updates.includes('address') ? '<tr><td style="padding:6px 12px;border:1px solid #e0e0e0;">Adresse</td><td style="padding:6px 12px;border:1px solid #e0e0e0;color:#28a745;">Mis à jour</td></tr>' : ''}
+                ${updates.includes('country') ? '<tr><td style="padding:6px 12px;border:1px solid #e0e0e0;">Pays</td><td style="padding:6px 12px;border:1px solid #e0e0e0;color:#28a745;">Mis à jour</td></tr>' : ''}
+                ${updates.includes('phoneNumber') ? '<tr><td style="padding:6px 12px;border:1px solid #e0e0e0;">Téléphone</td><td style="padding:6px 12px;border:1px solid #e0e0e0;color:#28a745;">Mis à jour</td></tr>' : ''}
+                ${updates.includes('email') ? '<tr><td style="padding:6px 12px;border:1px solid #e0e0e0;">Email</td><td style="padding:6px 12px;border:1px solid #e0e0e0;color:#28a745;">Mis à jour</td></tr>' : ''}
+                ${updates.includes('licenseNumber') ? '<tr><td style="padding:6px 12px;border:1px solid #e0e0e0;">Numéro de licence</td><td style="padding:6px 12px;border:1px solid #e0e0e0;color:#28a745;">Mis à jour</td></tr>' : ''}
+                ${updates.includes('siret') ? '<tr><td style="padding:6px 12px;border:1px solid #e0e0e0;">SIRET</td><td style="padding:6px 12px;border:1px solid #e0e0e0;color:#28a745;">Mis à jour</td></tr>' : ''}
+                ${updates.includes('workingsHours') ? '<tr><td style="padding:6px 12px;border:1px solid #e0e0e0;">Horaires</td><td style="padding:6px 12px;border:1px solid #e0e0e0;color:#28a745;">Mis à jour</td></tr>' : ''}
+                ${updates.includes('deliveryZone') ? '<tr><td style="padding:6px 12px;border:1px solid #e0e0e0;">Zone de livraison</td><td style="padding:6px 12px;border:1px solid #e0e0e0;color:#28a745;">Mis à jour</td></tr>' : ''}
+                ${updates.includes('document') ? '<tr><td style="padding:6px 12px;border:1px solid #e0e0e0;">Document '+extra+' Upload</td><td style="padding:6px 12px;border:1px solid #e0e0e0;color:#28a745;">Mis à jour</td></tr>' : ''}
+            </tbody>
+        </table>
+    </div>
+    `;
+
+    if (updates.includes('location')) {
+        await registerActivity('Location', updatedPharmacy._id, user._id, "Emplacement Mis à jour", `L'emplacement de la pharmacie ${updatedPharmacy.name} a été mis à jour`);
+    }
+    if (updates.includes('city')) {
+        await registerActivity('Ville', updatedPharmacy._id, user._id, "Ville Mise à jour", `La ville de la pharmacie ${updatedPharmacy.name} a été mise à jour`);
+    }
+    if (updates.includes('address')) {
+        await registerActivity('Adresse', updatedPharmacy._id, user._id, "Adresse Mise à jour", `L'adresse de la pharmacie ${updatedPharmacy.name} a été mise à jour`);
+    }
+    if (updates.includes('country')) {
+        await registerActivity('Pays', updatedPharmacy._id, user._id, "Pays Mis à jour", `Le pays de la pharmacie ${updatedPharmacy.name} a été mis à jour`);
+    }
+    if (updates.includes('phoneNumber')) {
+        await registerActivity('Téléphone', updatedPharmacy._id, user._id, "Téléphone Mis à jour", `Le numéro de téléphone de la pharmacie ${updatedPharmacy.name} a été mis à jour`);
+    }
+    if (updates.includes('email')) {
+        await registerActivity('Email', updatedPharmacy._id, user._id, "Email Mis à jour", `L'email de la pharmacie ${updatedPharmacy.name} a été mis à jour`);
+    }
+    if (updates.includes('licenseNumber')) {
+        await registerActivity('Numéro de licence', updatedPharmacy._id, user._id, "Numéro de licence Mis à jour", `Le numéro de licence de la pharmacie ${updatedPharmacy.name} a été mis à jour`);
+    }
+    if (updates.includes('siret')) {
+        await registerActivity('SIRET', updatedPharmacy._id, user._id, "SIRET Mis à jour", `Le SIRET de la pharmacie ${updatedPharmacy.name} a été mis à jour`);
+    }
+    if (updates.includes('workingsHours')) {
+        await registerActivity('Horaires', updatedPharmacy._id, user._id, "Horaires Mis à jour", `Les horaires d'ouverture de la pharmacie ${updatedPharmacy.name} ont été mis à jour`);
+    }
+    if (updates.includes('deliveryZone')) {
+        await registerActivity('Zone de livraison', updatedPharmacy._id, user._id, "Zone de livraison", `La Zone de livraison de la pharmacie ${updatedPharmacy.name} a été mis à jour`);
+    }
+    if (updates.includes('document')) {
+        await registerActivity('Pharmacie', updatedPharmacy._id, user._id, "Document Upload", `Document ${extra} pour la pharmacie ${updatedPharmacy.name} uploadé avec succès par ${user.name}`);
+    }
+    if (updatedPharmacy.status == "pending") {
+        await registerActivity('Pharmacie', updatedPharmacy._id, user._id, "Pharmacie Mise à jour", `La pharmacie ${updatedPharmacy.name} a été mise à jour et son statut est maintenant inactif`);
+    }
+
+    let EmailTo = [];
+    if (process.env.environment === 'development') {
+        EmailTo = ['damienzipadonou@gmail.com'];
+    }else{
+        const groups = await Group.find({ name: { $in: ['manager_admin', 'support_admin'] }, isActive: true });
+        const admins = groups.length > 0 ? await Admin.find({ group: { $in: groups.map(g => g._id) }, isActive: true }) : [];
+        EmailTo = admins.length > 0 ? admins.map(admin => admin.email).filter(email => !!email) : ['damienzipadonou@gmail.com'];
+    }
+
+    for (const email_admin of EmailTo) {
+        await transporter.sendMail({
+            from: `"Support CTMPHARMA" <${process.env.MAIL_USER}>`,
+            to: email_admin,
+            subject: 'Les informations d\'une pharmacie ont été modifiées',
+            html: messageToSendToAdmin + ((updatedPharmacy.status == "pending") ? '<br><b>Suite à la modification de certains éléments, vous ou un administrateur devez procéder à la vérification des éléments modifiés et approuver la pharmacie pour qu\'elle puisse à nouveau apparaître chez nos clients !</b>' : ''),
+        });
+    }
+}
+
 module.exports = { authentificateUser, setProfilInfo, loadGeneralsInfo, loadAllActivities, setSettingsFont, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload, pharmacieUpdate, pharmacieDocumentsUpload, pharmacieWorkingsHours, pharmacieActivities };
