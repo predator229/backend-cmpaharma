@@ -1211,31 +1211,45 @@ const pharmacieLocation = async (req, res) => {
 };
 const pharmacieActivities = async (req, res) => {
     try {
-        const { id } = req.body;
-        if (!id) { return res.status(400).json({ message: 'Missing required fields' }); }
-
         var the_admin = await getTheCurrentUserOrFailed(req, res);
         if (the_admin.error ) { return res.status(404).json({ message: 'User not found' }); }
 
         var user = the_admin.the_user;
         user.photoURL =  user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
 
-        let pharmacy = await Pharmacy.findById(id);
-        if (!pharmacy) { return res.status(404).json({ success: false, message: 'Pharmacie non trouvée' }); }
+        const userInGroupAdmin = Array.isArray(user.groups) && user.groups.length > 0
+            ? user.groups.some(g => ['superadmin', 'manager_admin', 'admin_technique'].includes(g.code))
+            : false;
 
+        let { id, prePage } = req.body;
+        if ( (!id || (Array.isArray(id) && id.length === 0)) && !userInGroupAdmin ) {
+            id = user.pharmaciesManaged?.map( pharm => pharm._id );
+            if (!id) {  return res.status(400).json({ message: 'Missing required fields'}); }
+        }
 
-        const activities = await Activity.find({ id_object: pharmacy._id })
-            .sort({ created_at: -1 })
-            .limit(3);
+        let pharmacies = id ? await Pharmacy.find( {_id : Array.isArray(id) ? {$in : id} : id }) : false;
+        if (!pharmacies && !userInGroupAdmin) { 
+            return res.status(404).json({ success: false, message: 'Pharmacie non trouvée' });
+        }
 
-        const users = await Admin.find({ _id: { $in: activities.map(act => act.author) } }).lean();
+        const activities = pharmacies
+            ? await Activity.find({ id_object: pharmacies.map(pharm => pharm._id) }).sort({ created_at: -1 }).limit(parseInt(prePage) || 10)
+            : await Activity.find().sort({ created_at: -1 }).limit(parseInt(prePage) || 10);
+
+        const mongoose = require('mongoose');
+        const validAuthorIds = activities
+            ? activities.map(act => act.author).filter(id => mongoose.Types.ObjectId.isValid(id))
+            : [];
+        const users = validAuthorIds.length > 0 ? await Admin.find({ _id: { $in: validAuthorIds } }).lean() : [];
         const usersMap = {};
         users.forEach(each => {
-            each.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(each.name || 'User')}&background=random&size=500`;
-            usersMap[each._id] = {
-                'name' : each._id.toString() == user._id.toString() ? 'Vous' : each.name+' '+each.surname,
-                'img' : each.photoURL
-            };
+            each.photoURL = each.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(each.name || 'User')}&background=random&size=500`;
+            if (each._id && mongoose.Types.ObjectId.isValid(each._id)) {
+                usersMap[each._id] = {
+                    'name' : each._id.toString() == user._id.toString() ? 'Vous' : each.name+' '+each.surname,
+                    'img' : each.photoURL
+                };
+            }
         });
         return res.status(200).json({'error':0, usersMap: usersMap, data: activities, user: user });
     } catch (error) {
@@ -1310,7 +1324,7 @@ const loadAllActivitiesAndSendMailAdmins = async (updatedPharmacy, updates, user
     if (process.env.environment === 'development') {
         EmailTo = ['damienzipadonou@gmail.com'];
     }else{
-        const groups = await Group.find({ name: { $in: ['manager_admin', 'support_admin'] }, isActive: true });
+        const groups = await Group.find({ code: { $in: ['manager_admin', 'support_admin'] }, isActive: true });
         const admins = groups.length > 0 ? await Admin.find({ group: { $in: groups.map(g => g._id) }, isActive: true }) : [];
         EmailTo = admins.length > 0 ? admins.map(admin => admin.email).filter(email => !!email) : ['damienzipadonou@gmail.com'];
     }

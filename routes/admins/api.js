@@ -48,6 +48,7 @@ router.post('/managers/pharmacies/activate', deliververifyFirebaseToken, pharmac
 router.post('/managers/pharmacies/reject', deliververifyFirebaseToken, pharmacieReject);
 router.post('/managers/pharmacies/documents', deliververifyFirebaseToken, pharmacieDocuments);
 router.post('/managers/pharmacies/documents/download', deliververifyFirebaseToken, pharmacieDocumentsDownload);
+router.post('/managers/pharmacies/activities', deliververifyFirebaseToken, pharmacieActivities);
 
 //pharcy-managment
 router.post('/pharmacy-managment/dashboard', deliververifyFirebaseToken, loadGeneralsInfo);
