@@ -382,9 +382,9 @@ const pharmacieDetails = async (req, res) => {
                                     .populate('products');
         pharmacy.revenue30days  = pharmacy.orders30days.reduce((total, order) => total + order.totalAmount, 0);
 
-        pharmacy.logoUrl = pharmacy.logoUrl ?? pharmacy.documents.logo.url;
+        pharmacy.logoUrl = pharmacy.logoUrl ?? pharmacy.documents?.logo?.url;
 
-        return res.status(200).json({'error':0, logoUrl:pharmacy.documents.logo.url ?? 'heh', data: pharmacy, user: user });
+        return res.status(200).json({'error':0, logoUrl:pharmacy.documents?.logo?.url ?? 'heh', data: pharmacy, user: user });
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }
