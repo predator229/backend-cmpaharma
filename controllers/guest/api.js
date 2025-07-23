@@ -16,25 +16,25 @@ const { query } = require('express');
 const checkPharmacyInfo = async (req, res) => {
     try {
         const { name, address, phone, email, country, city } = req.body;
-        let query = {};
-        if (email) {
-            query = { email: email };
-            var pharmaciesCount = await Pharmacy.countDocuments(query);
-            if (pharmaciesCount) { return res.status(200).json({'error':0, exist: pharmaciesCount != 0, errorMessage:'L\'email de la pharmacie entree est deja enregistrer aveec un autre pharmacie' }); }
-        }
-        if (phone) { query.phaneNumber = phone; }
-        if (name) { query.name = name; }
-        if (address) { query.address = address; }
 
-        const theCountrie = await Country.findOne({ name: country });
-        if (!theCountrie) {
-            return res.status(200).json({
-                error: 0,
-                continue: false,
-                exist: true,
-                errorMessage: 'Le pays n\'existe pas !.'
-            });
+        if (!name || !address || !phone || !email || !country || !city) {
+            return res.status(200).json({ error: 0, continue: false, exist: true,message: 'Veuillez remplir toutes les informations nécessaires !' });
         }
+
+        const theCountrie = await Country.findOne({ _id: country });
+        if (!theCountrie) {
+            return res.status(200).json({ error: 0, continue: false, exist: true, errorMessage: 'Le pays selectionné n\'existe pas ! Veuillez reassayer!' });
+        }
+
+        let query = {};
+        query = { email: email };
+        var pharmaciesCount = await Pharmacy.countDocuments(query);
+        if (pharmaciesCount) { return res.status(200).json({'error':0, exist: pharmaciesCount != 0, errorMessage:'L\'email de la pharmacie entree est deja enregistrer aveec un autre pharmacie' }); }
+        
+        query.phaneNumber = phone; 
+        query.name = name;
+        query.address = address;
+        query.country = theCountrie._id;
 
         var pharmaciesCount = await Pharmacy.countDocuments(query);
         return res.status(200).json({'error':0, exist: pharmaciesCount != 0, errorMessage: pharmaciesCount != 0 ? 'Un partenaire avec les informations entrees existe deja !' : '' });
@@ -44,31 +44,15 @@ const checkPharmacyInfo = async (req, res) => {
 };
 const checkPharmacyOwnerInfo = async (req, res) => {
     try {
-        let {
-            type_account,
-            pharmacy_name,
-            pharmacy_address,
-            pharmacy_phone,
-            pharmacy_email,
-            owner_full_name,
-            owner_email,
-            owner_phone,
-            country,
-            city
-        } = req.body;
+        let { type_account, pharmacy_name, pharmacy_address, pharmacy_phone, pharmacy_email, owner_full_name, owner_email, owner_phone, country, city} = req.body;
 
-        if (!pharmacy_name || !pharmacy_address || !pharmacy_phone || !pharmacy_email || !owner_email || !country || !city) {
+        if (!type_account || !pharmacy_name || !pharmacy_address || !pharmacy_phone || !pharmacy_email || !owner_email || !country || !city) { 
             return res.status(200).json({ error: 0, continue: false, errorMessage: 'Veuillez remplir toutes les informations nécessaires.' });
         }
 
-        const theCountrie = await Country.findOne({ name: country });
+        const theCountrie = await Country.findOne({ _id: country });
         if (!theCountrie) {
-            return res.status(200).json({
-                error: 0,
-                continue: false,
-                exist: true,
-                errorMessage: 'Le pays n\'existe pas !.'
-            });
+            return res.status(200).json({ error: 0, continue: false, exist: true, errorMessage: 'Le pays selectionné n\'existe pas ! Veuillez reassayer!' });
         }
 
         type_account = parseInt(type_account);
@@ -79,28 +63,18 @@ const checkPharmacyOwnerInfo = async (req, res) => {
         // Vérifie si l’email de la pharmacie existe déjà
         let query = { email: pharmacy_email };
         let pharmaciesCount = await Pharmacy.countDocuments(query);
-        if (pharmaciesCount) {
-            return res.status(200).json({
-                error: 0,
-                continue: false,
-                exist: true,
-                errorMessage: 'L\'email est déjà enregistré avec un autre partenaire.'
-            });
+        if (pharmaciesCount) { 
+            return res.status(200).json({ error: 0, continue: false, exist: true, errorMessage: 'L\'email est déjà enregistré avec un autre partenaire.' });
         }
 
         // Vérifie si d'autres infos similaires existent déjà
-        if (pharmacy_name) query.name = pharmacy_name;
-        if (pharmacy_address) query.address = pharmacy_address;
-        if (pharmacy_phone) query.phoneNumber = pharmacy_phone;
+        query.name = pharmacy_name;
+        query.address = pharmacy_address;
+        query.phoneNumber = pharmacy_phone;
 
         pharmaciesCount = await Pharmacy.countDocuments(query);
         if (pharmaciesCount) {
-            return res.status(200).json({
-                error: 0,
-                exist: true,
-                continue: false,
-                errorMessage: 'Les informations entrées sont déjà associées à une autre pharmacie.'
-            });
+            return res.status(200).json({ error: 0, exist: true, continue: false, errorMessage: 'Les informations entrées sont déjà associées à une autre pharmacie.' });
         }
 
         // Création de la pharmacie
@@ -110,63 +84,30 @@ const checkPharmacyOwnerInfo = async (req, res) => {
             phoneNumber: pharmacy_phone,
             email: pharmacy_email,
             country: theCountrie._id,
+            city: city,
         });
 
         // Cas 1 : le propriétaire a déjà un compte
+        the_user = await Admin.findOne({ email: owner_email }).populate([{ path: 'country' },{ path: 'pharmaciesManaged' },{ path: 'phone' },{ path: 'mobils' },{ path: 'setups' },{ path: 'groups', populate: [    { path: 'permissions' }]}]);
+
         if (type_account === 1) {
-            if (firebaseRezult.status !== 200) {
-                return res.status(200).json({
-                    error: 0,
-                    continue: false,
-                    errorMessage: 'L\'email du propriétaire du compte n\'est pas associé à un compte existant.'
-                });
+            if (firebaseRezult.status !== 200) { 
+                return res.status(200).json({ error: 0, continue: false, errorMessage: 'L\'email du propriétaire du compte n\'est pas associé à un compte existant.' });
             }
 
-            the_user = await Admin.findOne({ email: owner_email }).populate([
-            { path: 'country' },
-            { path: 'pharmaciesManaged' },
-            { path: 'phone' },
-            { path: 'mobils' },
-            { path: 'setups' },
-            { path: 'groups', populate: [
-                { path: 'permissions' }
-            ]}
-        ]);
-            if (  the_user?.groups?.some(g => ['admin', 'manager'].includes(g.code))) {
-                return res.status(200).json({
-                    error: 0,
-                    continue: false,
-                    errorMessage: 'Ce compte ne peut pas être associé à une nouvelle pharmacie.'
-                });
+            if (the_user?.groups?.some(g => ['admin', 'manager'].includes(g.code))) {
+                return res.status(200).json({ error: 0, continue: false, errorMessage: 'Ce compte ne peut pas être associé à une nouvelle pharmacie.' });
             }
         }
 
         // Cas 2 : créer un nouveau compte pour le propriétaire
         if (type_account === 2) {
             if (firebaseRezult.status === 200) {
-                return res.status(200).json({
-                    error: 0,
-                    exist: false,
-                    errorMessage: 'L\'email est déjà utilisé par un autre compte.'
-                });
+                return res.status(200).json({error: 0,exist: false,errorMessage: 'L\'email est déjà utilisé par un autre compte.'});
             }
 
-            the_user = await Admin.findOne({ email: owner_email }).populate([
-            { path: 'country' },
-            { path: 'pharmaciesManaged' },
-            { path: 'phone' },
-            { path: 'mobils' },
-            { path: 'setups' },
-            { path: 'groups', populate: [
-                { path: 'permissions' }
-            ]}
-        ]);
             if (the_user) {
-                return res.status(200).json({
-                    error: 0,
-                    exist: false,
-                    errorMessage: 'Ce compte ne peut pas être associé à une nouvelle pharmacie.'
-                });
+                return res.status(200).json({error: 0,exist: false,errorMessage: 'Ce compte ne peut pas être associé à une nouvelle pharmacie.'});
             }
 
             const resultCreatedUser = await createUserAndSendEmailLink(owner_email, req.body.type, process.env.FRONT_BASE_LINK+'/login');
@@ -176,12 +117,7 @@ const checkPharmacyOwnerInfo = async (req, res) => {
 
             firebaseRezult = await getUserInfoByEmail(owner_email, req.body.type,);
             if (firebaseRezult.status !== 200) {
-                return res.status(200).json({
-                    error: 0,
-                    exist: false,
-                    continue: false,
-                    errorMessage: 'Erreur lors de la création du compte. Veuillez réessayer.'
-                });
+                return res.status(200).json({ error: 0, exist: false, continue: false, errorMessage: 'Erreur lors de la création du compte. Veuillez réessayer.'});
             }
 
             const result = firebaseRezult.user;

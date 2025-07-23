@@ -23,7 +23,7 @@ const adminRoutes = require('@routes/admins/api');
 const { createAuthMiddleware } = require('@middlewares/auth');
 
 const deliverSocketRoutes = require('@routes/delivers/api_socket');
-const adminSocketRoutes = require('@routes/admins/api_socket');
+const adminSocketRoutes = require('@controllers/admins/api_socket');
 
 const app = express();
 const PORT = process.env.PORT || 5050;
@@ -117,53 +117,12 @@ async function seedGroupsWithValidation() {
         errorCount++;
       }
     }
-
-    // // Summary
-    // console.log('\n📊 Seeding Summary:');
-    // console.log(`✅ Created: ${createdCount} groups`);
-    // console.log(`🔄 Updated: ${updatedCount} groups`);
-    // console.log(`❌ Errors: ${errorCount} groups`);
-    // console.log(`📋 Total permissions available: ${allPermissions.length}`);
     
-    if (errorCount === 0) {
-      // console.log('🎉 Groups seeding completed successfully!');
-    } else {
-      // console.log('⚠️ Groups seeding completed with some errors.');
-    }
-
   } catch (error) {
     console.error('❌ Fatal error in seedGroupsWithValidation:', error);
     throw error;
   }
 }
-
-// Optional: Add validation function to verify seeding results
-// async function validateSeeding() {
-//   try {
-//     const totalGroups = await Group.countDocuments();
-//     const totalPermissions = await Permission.countDocuments();
-//     const activeGroups = await Group.countDocuments({ isActive: true });
-//     const groupsWithoutPermissions = await Group.find({ 
-//       permissions: { $size: 0 } 
-//     }).select('code name');
-    
-//     if (groupsWithoutPermissions.length > 0) {
-//       console.warn('⚠️ Groups without permissions:', 
-//         groupsWithoutPermissions.map(g => g.code)
-//       );
-//     }
-    
-//     return {
-//       totalGroups,
-//       totalPermissions,
-//       activeGroups,
-//       groupsWithoutPermissions: groupsWithoutPermissions.length
-//     };
-//   } catch (error) {
-//     console.error('❌ Error in validation:', error);
-//     throw error;
-//   }
-// }
 
 async function importData() {
     try {
@@ -234,7 +193,7 @@ const connectWithRetry = () => {
 
         const connectedUsers = new Map();
         const deliverNamespace = io.of('/deliver');
-        const adminNamespace = io.of('/admin');
+        const adminNamespace = io.of('/admin/websocket');
 
         const { verifyFirebaseSocketToken: deliverVerifyFirebaseSocketToken } = createAuthMiddleware('deliver');
         const { verifyFirebaseSocketToken: adminVerifyFirebaseSocketToken } = createAuthMiddleware('admin');
@@ -247,8 +206,7 @@ const connectWithRetry = () => {
 
         adminNamespace.use(adminVerifyFirebaseSocketToken);
         adminNamespace.on('connection', (socket) => {
-            console.log(`🔌 Administrateur connecté : ${socket.user.uid}`);
-            adminSocketRoutes(socket);
+            adminSocketRoutes(socket, io);
         });
 
         server.listen(PORT, () => {
@@ -261,4 +219,5 @@ const connectWithRetry = () => {
     });
 }
   connectWithRetry();
+
 

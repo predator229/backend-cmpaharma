@@ -4,7 +4,7 @@ const { createAuthMiddleware } = require('@middlewares/auth');
 const {getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse, getUserInfoByEmail, signUpUserWithEmailAndPassword,createUserAndSendEmailLink,deleteUserByEmail, getListCountries} = require('@tools/flutter_tools');
 
 const { verifyFirebaseToken: deliververifyFirebaseToken, injectDeliverType } = createAuthMiddleware('admin');
-const { authentificateUser, setProfilInfo, loadGeneralsInfo, setSettingsFont, loadAllActivities, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload,pharmacieUpdate, pharmacieDocumentsUpload, pharmacieWorkingsHours, pharmacieActivities} = require('@controllers/admins/api');
+const { authentificateUser, setProfilInfo, loadGeneralsInfo, setSettingsFont, loadAllActivities, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload,pharmacieUpdate, pharmacieDocumentsUpload, pharmacieWorkingsHours, pharmacieActivities,loadHistoricMiniChat} = require('@controllers/admins/api');
 const {checkPharmacyInfo, checkPharmacyOwnerInfo} = require('@controllers/guest/api');
 const upload = require('@middlewares/uploadRoutes');
 
@@ -68,4 +68,9 @@ router.post('/pharmacy-managment/pharmacies/update', deliververifyFirebaseToken,
 
 //tools
 router.post('/tools/get-countries-list' , getListCountries);
+
+//mini-chat
+router.post('/chat/pharmacy/messages', deliververifyFirebaseToken, loadHistoricMiniChat);
+
+
 module.exports = router;

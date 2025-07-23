@@ -21,7 +21,7 @@ const createAuthMiddleware = (type) => {
             next(); 
         } catch (error) {
             console.error(`[${type.toUpperCase()}] ❌ Erreur HTTP auth:`, error.message);
-            res.status(401).json({ message: 'Token invalide',  }); //error: error.message
+            res.status(401).json({ message: 'Token invalide',  });
         }
     };
 
@@ -39,7 +39,6 @@ const createAuthMiddleware = (type) => {
         }
     
         try {
-            // Utiliser firebaseApp au lieu de admin (correction de l'erreur)
             const decodedToken = await firebaseApp.auth().verifyIdToken(token);
             socket.user = decodedToken;
             console.log(`[${type.toUpperCase()}] ✅ Authentification WebSocket réussie pour ${decodedToken.uid}`);

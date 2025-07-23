@@ -20,6 +20,7 @@ const DeliveryZone = require('@models/DeliveryZone');
 const ZoneCoordinates = require('@models/ZoneCoordinates');
 const File = require('@models/File');
 const Group = require('@models/Group');
+const MiniChatMessage = require('@models/MiniChatMessage');
 
 const { model } = require('mongoose');
 const fs = require('fs');
@@ -203,7 +204,7 @@ const loadGeneralsInfo = async (req, res) => {
             recent_activities: recentActivities,
             recent_pharmacies: recentPharmacies,
         };
-        return res.status(200).json({'error':0, user: user, data: data, onlyShowListPharm : the_admin.onlyShowListPharm });
+        return res.status(200).json({'error':0, user: user, data: data, onlyShowListPharm : the_admin.onlyShowListPharm});
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }
@@ -996,10 +997,11 @@ const pharmacieUpdate = async (req, res) => {
         for (const element of requiredDoc) {
             var doc = existingPharmacy.documents[element]  ? await File.findOne({_id: existingPharmacy.documents[element] }) : null;
             if (!doc || doc == null ) {
-                return res.status(400).json({
+                const nameDoc = element == 'license' ? 'license pharmaceutique' : (  element == 'idDocument' ? 'Pièce d\'identité'  : 'attestation d\'assurance')
+                 return res.status(200).json({
                     error : 1,
                     success: false,
-                    message: `Le document ${element} est requis`
+                    message: `Le document : ${nameDoc} est requis ! \n Veuillez l'uploader pour continuer.`
                 });
             }
         }
@@ -1174,6 +1176,7 @@ const pharmacieWorkingsHours = async (req, res) => {
                 continue;
             }else{
                 workingHours.push({
+                    _id: 0,
                     day: daysOfWeek[index],
                     open: false,
                     opening: '08:00',
@@ -1339,4 +1342,28 @@ const loadAllActivitiesAndSendMailAdmins = async (updatedPharmacy, updates, user
     }
 }
 
-module.exports = { authentificateUser, setProfilInfo, loadGeneralsInfo, loadAllActivities, setSettingsFont, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload, pharmacieUpdate, pharmacieDocumentsUpload, pharmacieWorkingsHours, pharmacieActivities };
+const loadHistoricMiniChat = async (req, res) => {
+    try {
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error ) { return res.status(404).json({ message: 'User not found' }); }
+
+        var user = the_admin.the_user;
+        user.photoURL =  user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        const { pharmacyId } = req.body;
+
+        const pharmacy = pharmacyId ? await Pharmacy.findOne({_id: pharmacyId}) : false;
+
+        if (!pharmacy) {
+            res.status(200).json({ 'error':0, message:'La pharmacie n\'existe pas!' });
+        }
+
+        const messages = await MiniChatMessage.find({for: pharmacy._id}).populate('attachments');
+        
+        return res.status(200).json({'error':0, data:messages});
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+}
+
+module.exports = { authentificateUser, setProfilInfo, loadGeneralsInfo, loadAllActivities, setSettingsFont, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload, pharmacieUpdate, pharmacieDocumentsUpload, pharmacieWorkingsHours, pharmacieActivities, loadHistoricMiniChat };
