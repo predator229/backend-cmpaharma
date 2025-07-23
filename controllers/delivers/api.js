@@ -21,7 +21,6 @@ const authentificateUser = async (req, res) => {
         return res.status(500).json({ error: error.message });
     }
 };
-
 const getDefaultParams = async (req, res) => {
     try {
         var the_deliver = await getTheCurrentUserOrFailed(req, res);
@@ -35,7 +34,6 @@ const getDefaultParams = async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 };
-
 const addMobil = async (req, res) => {
     try {
         const { uid, mobil } = req.body;
@@ -276,7 +274,6 @@ const editProfil = async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 };
-
 const registerAdditionalInfo = async (req, res) => {
     try {
       const { uid, ...infos } = req.body;

@@ -1,5 +1,5 @@
 require('module-alias/register');
-const { authentificateUser, refreshUser, addMobil, addCard, removeMobil, editProfil, getDefaultParams,} = require('@controllers/delivers/api');
+const { authentificateUser, refreshUser, addMobil, addCard, removeMobil, editProfil, getDefaultParams,} = require('@controllers/admins/api_socket');
   
 const connectedUsers = new Map(); 
   
@@ -9,16 +9,6 @@ const connectedUsers = new Map();
   
     console.log(`✅ [Socket] ${userId} connecté via socket ${socket.id}`);
   
-    // Gestion des routes socket
-    socket.on('users:authentificate', (data, cb) => authentificateUser(socket, data, cb));
-    socket.on('users:refresh', (data, cb) => refreshUser(socket, data, cb));
-    socket.on('settings:get-default-params', (data, cb) => getDefaultParams(socket, data, cb));
-    socket.on('users:edit-profil', (data, cb) => editProfil(socket, data, cb));
-    socket.on('users:add-mobil', (data, cb) => addMobil(socket, data, cb));
-    socket.on('users:add-card', (data, cb) => addCard(socket, data, cb));
-    socket.on('users:remove-mobil', (data, cb) => removeMobil(socket, data, cb));
-  
-    // Ping de présence
     socket.on('user:online', (_, cb) => {
       console.log(`🟢 ${userId} est actif`);
       cb?.({ success: true });
@@ -33,5 +23,10 @@ const connectedUsers = new Map();
       const list = Array.from(connectedUsers.entries());
       cb?.({ success: true, users: list });  
     });
+
+
+    socket.on('users:remove-mobil', (data, cb) => removeMobil(socket, data, cb));
+
+
   };
   

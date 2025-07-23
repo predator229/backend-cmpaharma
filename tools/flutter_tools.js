@@ -122,7 +122,7 @@ const getUserInfoByUUID = async (uuid, type) => {
     }
 };
 
-const getTheCurrentUserOrFailed = async (req, res) => {
+const getTheCurrentUserOrFailed = async (req, res = null) => {
     const { uid, infos = {}, type = "deliver", saveNewUser=false, tokenImp } = req.body;
     
      if (!uid) { return res.status(400).json({ error : 0, message: req.body});}
@@ -142,6 +142,7 @@ const getTheCurrentUserOrFailed = async (req, res) => {
             { path: 'phone' },
             { path: 'mobils' },
             { path: 'setups' },
+            {path: 'pharmaciesManaged'},
             { path: 'groups', populate: [
                 { path: 'permissions' }
             ]}
@@ -173,9 +174,7 @@ const getTheCurrentUserOrFailed = async (req, res) => {
             });
        }
         
-    }
-    var statuss = Array.isArray(the_user?.pharmaciesManaged) ? the_user.pharmaciesManaged.map(function (pharm) { return pharm.status; }) : [];
-
+    }    
     if (!the_user && saveNewUser ) { //&& process.env.NODE_ENV == 'development'
         const result = await getUserInfoByUUID(uid, type);
         if (result.status !== 200) {
@@ -348,8 +347,10 @@ const getTheCurrentUserOrFailed = async (req, res) => {
             await the_user.save();
         }
     }
+    if (the_user){
 
-    return {error : the_user ? 0 : 1, the_user:the_user, onlyShowListPharm :  statuss.includes('pending'), status:200};
+    }
+    return {error : the_user ? 0 : 1, the_user:the_user, onlyShowListPharm :  Array.isArray(the_user?.pharmaciesManaged) ? the_user.pharmaciesManaged.map(function (pharm) { if (pharm.status === 'pending') {return pharm._id;}  }) : [], status:200, statuss: Array.isArray(the_user?.pharmaciesManaged) ? the_user.pharmaciesManaged.map(function (pharm) { return pharm.status; }) : []};
 };
 const registerActivity = async (type, id, author=false, title, description) => {
     const activity = new Activity({
