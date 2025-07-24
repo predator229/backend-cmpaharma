@@ -32,6 +32,11 @@ const Pharmacy = require('@models/Pharmacy');
 const Activity = require('@models/Activity');
 const { v4: uuidv4 } = require('uuid');
 const Category = require('./models/Category');
+const {getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse, registerActivity } = require('@tools/flutter_tools');
+
+const MiniChatMessage = require('@models/MiniChatMessage'); 
+// const Pharmacy = require('@models/Pharmacy'); 
+const MiniChatAttachement = require('@models/MiniChatAttachement');
 
 app.use(express.json());
 app.use(cors());
@@ -205,8 +210,8 @@ const connectWithRetry = () => {
         });
 
         adminNamespace.use(adminVerifyFirebaseSocketToken);
-        adminNamespace.on('connection', (socket) => {
-            adminSocketRoutes(socket, io);
+        adminNamespace.on('connection', async (socket) => {            
+          adminSocketRoutes(socket, adminNamespace);
         });
 
         server.listen(PORT, () => {
