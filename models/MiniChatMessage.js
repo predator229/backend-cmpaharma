@@ -8,7 +8,7 @@ const minichatmessageSchema = new mongoose.Schema({
 
   for: { type: mongoose.Schema.Types.ObjectId, ref: 'Pharmarcy', required: false },
   message: { type: String, required: false },
-  attachments : [{ type: mongoose.Schema.Types.ObjectId, ref : 'MiniChatAttachement', required:false }],
+  attachments: { type: mongoose.Schema.Types.ObjectId, ref: 'File' , required: false},
   isActivated: { type: Boolean, default: true },
   isDeleted: { type: Boolean, default: false },
   seen: { type: Boolean, default: false },

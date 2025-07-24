@@ -1,6 +1,7 @@
 const MiniChatMessage = require('@models/MiniChatMessage'); 
 const Pharmacy = require('@models/Pharmacy'); 
 const MiniChatAttachement = require('@models/MiniChatAttachement');
+const File = require('@models/File');
 
 const {getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse, registerActivity } = require('@tools/flutter_tools');
 
@@ -107,7 +108,7 @@ const adminSocketRoutes = async (socket, adminNamespace) => {
 
         // Event: Envoyer un message
         socket.on('send_message', async (data) => {
-            const { pharmacyId, message = {} } = data;
+            const { pharmacyId, message = {}, attachments } = data;
 
             if (!pharmacyId) {
                 socket.emit('error', { message: 'pharmacyId est requis' });
@@ -126,20 +127,6 @@ const adminSocketRoutes = async (socket, adminNamespace) => {
 
                 // Traitement des attachments
                 var attsMess = [];
-                if (message.attachments && Array.isArray(message.attachments)) {
-                    for (const att of message.attachments) {
-                        const attToSave = new MiniChatAttachement({
-                            name: att.name,
-                            type: att.type,
-                            size: att.size,
-                            url: att.url,
-                            isActivated: true,
-                            isDeleted: false,
-                        });
-                        await attToSave.save();
-                        attsMess.push(attToSave._id);
-                    }
-                }
 
                 // Création du nouveau message
                 const newMessage = new MiniChatMessage({
@@ -148,7 +135,6 @@ const adminSocketRoutes = async (socket, adminNamespace) => {
                     senderType: message.senderType,
                     for: pharmacy._id,
                     message: message.message || '',
-                    attachments: attsMess,
                     isActivated: true,
                     isDeleted: false,
                     seen: false,
@@ -156,6 +142,12 @@ const adminSocketRoutes = async (socket, adminNamespace) => {
                     updatedAt: new Date()
                 });
 
+                if (attachments) {
+                    const fileee = await File.findOne({_id: attachments});
+                    if (fileee) {
+                        newMessage.attachments = fileee._id;
+                    }
+                }
                 await newMessage.save();
                 await newMessage.populate('attachments');
                 

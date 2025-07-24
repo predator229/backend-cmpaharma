@@ -19,6 +19,9 @@ const Location = require('@models/Location');
 const DeliveryZone = require('@models/DeliveryZone');
 const ZoneCoordinates = require('@models/ZoneCoordinates');
 const File = require('@models/File');
+
+const path = require('path');
+
 const Group = require('@models/Group');
 const MiniChatMessage = require('@models/MiniChatMessage');
 
@@ -768,7 +771,7 @@ const pharmacieDocumentsUpload = async (req, res) => {
 
         const missingFields = [];
         if (!file) missingFields.push('file');
-        if (!type_ || !['logo', 'license', 'idDocument', 'insurance'].includes(type_)) missingFields.push('type_');
+        if (!type_ || !['logo', 'license', 'idDocument', 'insurance', 'chat_pharm_apartment'].includes(type_)) missingFields.push('type_');
         if (!pharmacyId) missingFields.push('pharmacyId');
         if (!uid) missingFields.push('uid');
 
@@ -808,6 +811,13 @@ const pharmacieDocumentsUpload = async (req, res) => {
             }
         }
 
+        const uploadDir = path.join(__dirname, '../../uploads', pharmacyId, type_);
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        const newFilePath = file.path.replace('uploads/',`uploads/${pharmacyId}/${type_}/` );
+        fs.renameSync(file.path, newFilePath);
+        file.path = newFilePath;
         const file_ = new File({
             originalName: file.originalname ?? ("new_file_" + thetime),
             fileName: `${pharmacy.name}_${type_}_${thetime}.${extension}`,
@@ -828,9 +838,11 @@ const pharmacieDocumentsUpload = async (req, res) => {
 
         await file_.save();
 
-        pharmacy.documents = pharmacy.documents || {};
-        pharmacy.documents[type_] = file_._id;
-        await pharmacy.save();
+        if (type_ != 'chat_pharm_apartment'){
+            pharmacy.documents = pharmacy.documents || {};
+            pharmacy.documents[type_] = file_._id;
+            await pharmacy.save();
+        }
         pharmacy.populate([
             { path: 'location'},
             { path: 'country'},
@@ -847,9 +859,10 @@ const pharmacieDocumentsUpload = async (req, res) => {
             ]},
         ]);
 
-        await loadAllActivitiesAndSendMailAdmins(pharmacy, ['document'], user, type_);
-
-        res.json({ error: 0, success: true, user: user, data: pharmacy, message: `Document ${type_} pour la pharmacie ${pharmacy.name} uploadé avec succès sur le serveur` });
+        if (type_ != 'chat_pharm_apartment'){
+            await loadAllActivitiesAndSendMailAdmins(pharmacy, ['document'], user, type_);
+        }
+        res.json({ error: 0, success: true, fileId: file_._id,  user: user, data: pharmacy, message: `Document ${type_} pour la pharmacie ${pharmacy.name} uploadé avec succès sur le serveur` });
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }
@@ -1240,6 +1253,7 @@ const pharmacieActivities = async (req, res) => {
             : await Activity.find().sort({ created_at: -1 }).limit(parseInt(prePage) || 10);
 
         const mongoose = require('mongoose');
+        const path = require('path');
         const validAuthorIds = activities
             ? activities.map(act => act.author).filter(id => mongoose.Types.ObjectId.isValid(id))
             : [];
