@@ -871,7 +871,7 @@ const pharmacieUpdate = async (req, res) => {
     try {
         let { 
             id, name, address, phoneNumber, email, licenseNumber, siret, 
-            location, workingHours, suspensionDate, suspensionReason, comentaire, country, city, deliveryZone 
+            location, workingHours, suspensionDate, suspensionReason, comentaire, country, city, deliveryZone, deliveryServices 
         } = req.body;
 
         if (!id || !name || !address || !phoneNumber || !email || !licenseNumber || !siret || !country || !city) {
@@ -910,6 +910,16 @@ const pharmacieUpdate = async (req, res) => {
                 success: false,
                 message: 'Une autre pharmacie avec cet email, numéro de licence ou SIRET existe déjà'
             });
+        }
+
+        if (deliveryServices) {
+            if (typeof deliveryServices.homeDelivery == 'undefined' || typeof deliveryServices.pickupInStore == 'undefined' || typeof deliveryServices.expressDelivery == 'undefined' || typeof deliveryServices.scheduledDelivery == 'undefined') {
+                return res.status(400).json({
+                    error : 1,
+                    success: false,
+                    message: 'Les services de livraison doivent être spécifiés'
+                });
+            }
         }
 
         const theCountrie = await Country.findOne({ _id: country });
@@ -1079,8 +1089,18 @@ const pharmacieUpdate = async (req, res) => {
             country: theCountrie._id,
             city,
             comentaire,
-            deliveryZone: newDeliveryZone
+            deliveryZone: newDeliveryZone,
+            deliveryServices: deliveryServices ?? {
+                homeDelivery: true,
+                pickupInStore: true,
+                expressDelivery: false,
+                scheduledDelivery: false,
+            }
         };
+
+        if (deliveryServices) {
+            updates.push('deliveryServices');
+        }
 
         if (existingLocation) {
             await existingLocation.save();
@@ -1295,6 +1315,7 @@ const loadAllActivitiesAndSendMailAdmins = async (updatedPharmacy, updates, user
                 ${updates.includes('workingsHours') ? '<tr><td style="padding:6px 12px;border:1px solid #e0e0e0;">Horaires</td><td style="padding:6px 12px;border:1px solid #e0e0e0;color:#28a745;">Mis à jour</td></tr>' : ''}
                 ${updates.includes('deliveryZone') ? '<tr><td style="padding:6px 12px;border:1px solid #e0e0e0;">Zone de livraison</td><td style="padding:6px 12px;border:1px solid #e0e0e0;color:#28a745;">Mis à jour</td></tr>' : ''}
                 ${updates.includes('document') ? '<tr><td style="padding:6px 12px;border:1px solid #e0e0e0;">Document '+extra+' Upload</td><td style="padding:6px 12px;border:1px solid #e0e0e0;color:#28a745;">Mis à jour</td></tr>' : ''}
+                ${updates.includes('deliveryServices') ? '<tr><td style="padding:6px 12px;border:1px solid #e0e0e0;">Services de livraisons</td><td style="padding:6px 12px;border:1px solid #e0e0e0;color:#28a745;">Mis à jour</td></tr>' : ''}
             </tbody>
         </table>
     </div>
