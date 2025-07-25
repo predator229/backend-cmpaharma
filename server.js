@@ -210,7 +210,7 @@ const connectWithRetry = () => {
         });
 
         adminNamespace.use(adminVerifyFirebaseSocketToken);
-        adminNamespace.on('connection', async (socket) => {            
+        adminNamespace.on('connection', async (socket) => {
           adminSocketRoutes(socket, adminNamespace);
         });
 
