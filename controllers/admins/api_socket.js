@@ -153,11 +153,6 @@ const adminSocketRoutes = async (socket, adminNamespace) => {
                 
                 const plainMessage = newMessage.toObject();
 
-                // Debug: vérifier qui est dans la room
-                // const socketsInRoom = await adminNamespace.in(roomName).fetchSockets();
-                // console.log(`📤 Envoi message dans ${roomName} à ${socketsInRoom.length} socket(s)`);
-                
-                // Envoyer le message à toute la room
                 adminNamespace.to(roomName).emit('new_message', {
                     message: plainMessage,
                     pharmacyId: pharmacyId
