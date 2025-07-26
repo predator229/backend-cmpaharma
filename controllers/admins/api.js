@@ -19,6 +19,7 @@ const Location = require('@models/Location');
 const DeliveryZone = require('@models/DeliveryZone');
 const ZoneCoordinates = require('@models/ZoneCoordinates');
 const File = require('@models/File');
+const Category = require('@models/Category');
 
 const path = require('path');
 
@@ -30,6 +31,7 @@ const fs = require('fs');
 const { error, group } = require('console');
 
 const nodemailer = require('nodemailer');
+const { type } = require('os');
 
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com', 
@@ -764,6 +766,102 @@ const pharmacieDocumentsDownload = async (req, res) => {
         return res.status(500).json({ error: error.message });
     }
 };
+const pharmacieCategorieImagesUpload = async (req, res) => {
+    try {
+        const { type_, categoryId, uid } = req.body;
+        const file = req.file;
+
+        const missingFields = [];
+        if (!file) missingFields.push('file');
+        if (!type_ || !['imageUrl', 'iconUrl'].includes(type_)) missingFields.push('type_');
+        if (!categoryId) missingFields.push('categoryId');
+        if (!uid) missingFields.push('uid');
+
+        if (missingFields.length > 0) {
+            return res.status(400).json({ message: 'Missing required fields', missingFields });
+        }
+
+        req.body.type = "admin"
+
+        const the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error) return res.status(404).json({ message: 'User not found' });
+
+        const user = the_admin.the_user;
+        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        const category = await Category.findById(categoryId);
+        if (!category) return res.status(404).json({ error: 1, success: false, message: 'Category non trouvée' });
+
+        const thetime = Date.now().toString();
+        const extension = file.originalname ? file.originalname.split('.').pop() : 'png';
+
+        const existant = await File.find({
+            fileType: type_,
+            'linkedTo.model': 'Category',
+            'linkedTo.objectId': category._id
+        });
+        if (existant.length > 0) {
+            await File.deleteMany({
+                fileType: type_,
+                'linkedTo.model': 'Category',
+                'linkedTo.objectId': category._id
+            });
+            for (const f of existant) {
+                if (f.url && fs.existsSync(f.url)) {
+                    try { fs.unlinkSync(f.url); } catch (e) {}
+                }
+            }
+        }
+
+        const uploadDir = path.join(__dirname, '../../uploads', categoryId, type_);
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        const newFilePath = file.path.replace('uploads/',`uploads/${categoryId}/${type_}/` );
+        fs.renameSync(file.path, newFilePath);
+        file.path = newFilePath;
+        const file_ = new File({
+            originalName: file.originalname ?? ("new_file_" + thetime),
+            fileName: `${category.name}_${type_}_${thetime}.${extension}`,
+            fileType: type_,
+            fileSize: file.size,
+            url: file.path,
+            extension: extension,
+            uploadedBy: user._id,
+            linkedTo: { model: "Category", objectId: category._id, },
+            tags: [],
+            isPrivate: true,
+            meta: {
+                width: file.width ?? 200,
+                height: file.height ?? 200,
+                pages: file.page ?? 1
+            }
+        });
+
+        await file_.save();
+
+        // if (type_ != 'chat_pharm_apartment'){
+            if (type_ == 'imageUrl') {  category.imageUrl = file_._id;; }
+            if (type_ == 'iconUrl') {  category.iconUrl = file_._id;; }
+            await category.save();
+        // }
+        category.populate([
+            { path: 'imageUrl'},
+            { path: 'iconUrl'},
+            { path: 'parentCategory'},
+            {path: 'pharmaciesList'},
+            { path: 'subcategories'}
+        ]);
+
+        // if (type_ != 'chat_pharm_apartment'){
+            // await loadAllActivitiesAndSendMailAdmins(pharmacy, ['document'], user, type_);
+        // }
+        res.json({ error: 0, success: true, fileId: file_._id,  user: user, data: category, message: `Document ${type_} pour la pharmacie ${category.name} uploadé avec succès sur le serveur` });
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+};
+
 const pharmacieDocumentsUpload = async (req, res) => {
     try {
         const { type_, pharmacyId, uid } = req.body;
@@ -793,20 +891,22 @@ const pharmacieDocumentsUpload = async (req, res) => {
         const thetime = Date.now().toString();
         const extension = file.originalname ? file.originalname.split('.').pop() : 'png';
 
-        const existant = await File.find({
-            fileType: type_,
-            'linkedTo.model': 'Pharmacies',
-            'linkedTo.objectId': pharmacy._id
-        });
-        if (existant.length > 0) {
-            await File.deleteMany({
+        if (type_ != 'chat_pharm_apartment') {
+            const existant = await File.find({
                 fileType: type_,
                 'linkedTo.model': 'Pharmacies',
                 'linkedTo.objectId': pharmacy._id
             });
-            for (const f of existant) {
-                if (f.url && fs.existsSync(f.url)) {
-                    try { fs.unlinkSync(f.url); } catch (e) {}
+            if (existant.length > 0) {
+                await File.deleteMany({
+                    fileType: type_,
+                    'linkedTo.model': 'Pharmacies',
+                    'linkedTo.objectId': pharmacy._id
+                });
+                for (const f of existant) {
+                    if (f.url && fs.existsSync(f.url)) {
+                        try { fs.unlinkSync(f.url); } catch (e) {}
+                    }
                 }
             }
         }
@@ -1293,6 +1393,135 @@ const pharmacieActivities = async (req, res) => {
         return res.status(500).json({ error: error.message });
     }
 };
+const pharmacyCategoriesList = async(req, res)=> {
+    try {
+        const { status, level, pharmaciesId, search } = req.body;
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+
+        if (the_admin.error ) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        user = the_admin.the_user;
+        user.photoURL =  user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        let query = {};
+      
+        if (status) { query.status = status;}
+        if (level) { query.level = level; }
+       
+        if (search) {
+            const cleanedSearch = search.replace(/\s+/g, '').replace(/^(\+33|0)/, '');
+            const regex = new RegExp(cleanedSearch, 'i');
+            query.$or = [
+                { name: regex },
+                { address: regex },
+                { email: regex },
+                { phoneNumber: { $regex: regex } },
+                { licenseNumber: regex },
+                { siret: regex },
+            ];
+        }
+        const catPharmaciesList = user?.groups?.some(g => ['manager_pharmacy', 'pharmacien','preparateur', 'caissier', 'consultant'].includes(g.code)) ? user.pharmaciesManaged.map(pharm => pharm._id) : [];
+        const pharmaciesList = user?.groups?.some(g => ['manager_pharmacy', 'pharmacien','preparateur', 'caissier', 'consultant'].includes(g.code)) ? user.pharmaciesManaged.map(pharm => ({ value: pharm._id, label: pharm.name })) : [];
+
+        if (pharmaciesId) {
+            query.pharmaciesList = { $in: pharmaciesId };
+        }else  if (user?.groups?.some(g => ['manager_pharmacy', 'pharmacien','preparateur', 'caissier', 'consultant'].includes(g.code))) {
+            query.pharmaciesList = { $in: catPharmaciesList };
+        }else{
+            return res.status(200).json({'error':0, putin:'he merde je suis ici', user: user, data: [], query: query });
+        }
+
+        // return res.status(200).json({'error': 1, query, data: [], });
+
+        let categories = await Category.find(query)
+                .populate('parentCategory')
+                .populate('subcategories')
+                .populate('imageUrl')
+                .populate('iconUrl')
+                .populate('pharmaciesList')
+                .lean();
+
+        let catPerId = {};
+        categories.map((category) => {
+            catPerId[category._id] = category;
+        });
+
+        return res.status(200).json({'error':0, user: user, data: categories, catPerId:catPerId, pharmaciesList});
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+};
+
+const pharmacyCategoriesCreate = async (req, res) => {
+    try {
+        const { name, description, slug, parentCategory, level, status, displayOrder, isVisible, metaTitle, metaDescription, keywords, requiresPrescription, ageRestriction, specialCategory, pharmaciesList} = req.body;
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+
+        if (the_admin.error ) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        user = the_admin.the_user;
+        user.photoURL =  user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        let query = {};
+
+        if (!name || !slug || !status || !specialCategory || !pharmaciesList) {
+            return res.status(200).json({  error:1, success:false, errorMessage: 'Certains champs sont obligatoires! Remplissez les tous', message: 'Certains champs sont obligatoires! Remplissez les tous' });
+        }
+      
+        if (name) { query.status = name;}
+        if (description) { query.status = description;}
+        if (slug) { query.slug = slug; }
+        if (parentCategory) { query.parentCategory = parentCategory;}
+        if (level) { query.status = level;}
+        if (displayOrder) { query.status = displayOrder;}
+        if (isVisible) { query.level = isVisible; }
+        if (metaTitle) { query.type = metaTitle; }
+        if (metaDescription) { query.type = metaDescription; }
+        if (keywords) { query.type = {$in : keywords}; }
+        if (requiresPrescription) { query.type = requiresPrescription; }
+        if (ageRestriction) { query.type = ageRestriction; }
+        if (specialCategory) { query.type = specialCategory; }
+        if (pharmaciesList) { query.type = {$in: pharmaciesList}; }
+
+        let existingCategorie = await Category.find(query);
+        if (existingCategorie.length) {
+            return res.status(200).json({ error:1, success:false, errorMessage: 'Une categorie avec ces caracteristiques existe deja' , message: 'Une categorie avec ces caracteristiques existe deja' });
+        }
+
+        if (slug){
+            let slugExist = await Category.findOne({ slug: slug });
+            if (slugExist){
+                return res.status(200).json({ error:1, success:false, errorMessage: 'Une categorie avec ces caracteristiques existe deja', message: 'Le slug existe deja pour une autre categorie' });
+            }
+        }
+        const newCategory = new Category({
+            name,
+            description,
+            slug,
+            parentCategory,
+            level,
+            status,
+            displayOrder,
+            isVisible,
+            metaTitle,
+            metaDescription,
+            keywords,
+            requiresPrescription,
+            ageRestriction,
+            specialCategory,
+            pharmaciesList,
+        });
+
+        await newCategory.save();
+        return res.status(200).json({ error:0, success:true, message: 'La categorie a ete cree avec succes', data: newCategory });
+
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+}
+
 
 const loadAllActivitiesAndSendMailAdmins = async (updatedPharmacy, updates, user, extra = '') => {
     let messageToSendToAdmin = `
@@ -1401,4 +1630,4 @@ const loadHistoricMiniChat = async (req, res) => {
     }
 }
 
-module.exports = { authentificateUser, setProfilInfo, loadGeneralsInfo, loadAllActivities, setSettingsFont, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload, pharmacieUpdate, pharmacieDocumentsUpload, pharmacieWorkingsHours, pharmacieActivities, loadHistoricMiniChat };
+module.exports = { authentificateUser, setProfilInfo, loadGeneralsInfo, loadAllActivities, setSettingsFont, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload, pharmacieUpdate, pharmacieDocumentsUpload, pharmacieWorkingsHours, pharmacieActivities, loadHistoricMiniChat, pharmacyCategoriesList, pharmacieCategorieImagesUpload, pharmacyCategoriesCreate };

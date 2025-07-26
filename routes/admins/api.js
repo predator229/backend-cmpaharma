@@ -4,7 +4,7 @@ const { createAuthMiddleware } = require('@middlewares/auth');
 const {getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse, getUserInfoByEmail, signUpUserWithEmailAndPassword,createUserAndSendEmailLink,deleteUserByEmail, getListCountries} = require('@tools/flutter_tools');
 
 const { verifyFirebaseToken: deliververifyFirebaseToken, injectDeliverType } = createAuthMiddleware('admin');
-const { authentificateUser, setProfilInfo, loadGeneralsInfo, setSettingsFont, loadAllActivities, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload,pharmacieUpdate, pharmacieDocumentsUpload, pharmacieWorkingsHours, pharmacieActivities,loadHistoricMiniChat} = require('@controllers/admins/api');
+const { authentificateUser, setProfilInfo, loadGeneralsInfo, setSettingsFont, loadAllActivities, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload,pharmacieUpdate, pharmacieDocumentsUpload, pharmacieWorkingsHours, pharmacieActivities,loadHistoricMiniChat, pharmacyCategoriesList, pharmacieCategorieImagesUpload, pharmacyCategoriesCreate} = require('@controllers/admins/api');
 const {checkPharmacyInfo, checkPharmacyOwnerInfo} = require('@controllers/guest/api');
 const upload = require('@middlewares/uploadRoutes');
 
@@ -57,7 +57,6 @@ router.post('/pharmacy-managment/dashboard/activities', deliververifyFirebaseTok
 router.post('/pharmacy-managment/pharmacies/list', deliververifyFirebaseToken, pharmacieList);
 router.post('/pharmacy-managment/pharmacies/details', deliververifyFirebaseToken, pharmacieDetails);
 router.post('/pharmacy-managment/pharmacies/activities', deliververifyFirebaseToken, pharmacieActivities);
-// router.post('/pharmacy-managment/pharmacies/details', deliververifyFirebaseToken, pharmacieDetails);
 router.post('/pharmacy-managment/pharmacies/workingsHours', deliververifyFirebaseToken, pharmacieWorkingsHours);
 router.post('/pharmacy-managment/pharmacies/new', deliververifyFirebaseToken, pharmacieNew);
 router.post('/pharmacy-managment/pharmacies/edit', deliververifyFirebaseToken, pharmacieEdit);
@@ -65,6 +64,10 @@ router.post('/pharmacy-managment/pharmacies/documents', deliververifyFirebaseTok
 router.post('/pharmacy-managment/pharmacies/documents/download', deliververifyFirebaseToken, pharmacieDocumentsDownload);
 router.post('/pharmacy-managment/pharmacies/upload-document', deliververifyFirebaseToken, upload.single('file'), pharmacieDocumentsUpload);
 router.post('/pharmacy-managment/pharmacies/update', deliververifyFirebaseToken, pharmacieUpdate);
+
+router.post('/pharmacy-management/categories/list', deliververifyFirebaseToken, pharmacyCategoriesList);
+router.post('/pharmacy-management/categories/create', deliververifyFirebaseToken, pharmacyCategoriesCreate);
+router.post('/pharmacy-managment/pharmacies/upload-images-cat', deliververifyFirebaseToken, upload.single('file'), pharmacieCategorieImagesUpload);
 
 //tools
 router.post('/tools/get-countries-list' , getListCountries);
