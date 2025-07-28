@@ -33,7 +33,6 @@ const CategorySchema = new mongoose.Schema({
 });
 
 CategorySchema.index({ name: 'text', description: 'text' });
-CategorySchema.index({ slug: 1 }, { unique: true });
 CategorySchema.index({ parentCategory: 1, status: 1 });
 CategorySchema.index({ level: 1, displayOrder: 1 });
 
