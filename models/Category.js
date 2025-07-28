@@ -24,7 +24,7 @@ const CategorySchema = new mongoose.Schema({
   viewCount: { type: Number, default: 0 },
   
   requiresPrescription: { type: Boolean, default: false },
-  ageRestriction: { type: Number, default: null },
+  restrictions: [{ type: String, default: null }],
   specialCategory: { type: String, enum: ['otc', 'prescription', 'homeopathy', 'medical_device', 'supplement', 'cosmetic'], default: 'otc' },
 
   pharmaciesList: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Pharmacy', required: true }],

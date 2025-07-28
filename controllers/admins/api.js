@@ -1432,8 +1432,6 @@ const pharmacyCategoriesList = async(req, res)=> {
             return res.status(200).json({'error':0, putin:'he merde je suis ici', user: user, data: [], query: query });
         }
 
-        // return res.status(200).json({'error': 1, query, data: [], });
-
         let categories = await Category.find(query)
                 .populate('parentCategory')
                 .populate('subcategories')
@@ -1455,7 +1453,7 @@ const pharmacyCategoriesList = async(req, res)=> {
 
 const pharmacyCategoriesCreate = async (req, res) => {
     try {
-        const { name, description, slug, parentCategory, level, status, displayOrder, isVisible, metaTitle, metaDescription, keywords, requiresPrescription, ageRestriction, specialCategory, pharmaciesList} = req.body;
+        const { name, description, slug, parentCategory, status, displayOrder, isVisible, metaTitle, metaDescription, keywords, requiresPrescription, restrictions, specialCategory, pharmaciesList} = req.body;
         var the_admin = await getTheCurrentUserOrFailed(req, res);
 
         if (the_admin.error ) {
@@ -1470,20 +1468,19 @@ const pharmacyCategoriesCreate = async (req, res) => {
             return res.status(200).json({  error:1, success:false, errorMessage: 'Certains champs sont obligatoires! Remplissez les tous', message: 'Certains champs sont obligatoires! Remplissez les tous' });
         }
       
-        if (name) { query.status = name;}
-        if (description) { query.status = description;}
+        if (name) { query.name = name;}
+        if (description) { query.description = description;}
         if (slug) { query.slug = slug; }
         if (parentCategory) { query.parentCategory = parentCategory;}
-        if (level) { query.status = level;}
-        if (displayOrder) { query.status = displayOrder;}
-        if (isVisible) { query.level = isVisible; }
-        if (metaTitle) { query.type = metaTitle; }
-        if (metaDescription) { query.type = metaDescription; }
-        if (keywords) { query.type = {$in : keywords}; }
-        if (requiresPrescription) { query.type = requiresPrescription; }
-        if (ageRestriction) { query.type = ageRestriction; }
-        if (specialCategory) { query.type = specialCategory; }
-        if (pharmaciesList) { query.type = {$in: pharmaciesList}; }
+        if (displayOrder) { query.displayOrder = displayOrder;}
+        if (isVisible) { query.isVisible = isVisible; }
+        if (metaTitle) { query.metaTitle = metaTitle; }
+        if (metaDescription) { query.metaDescription = metaDescription; }
+        if (keywords) { query.keywords = {$in : keywords}; }
+        if (requiresPrescription) { query.requiresPrescription = requiresPrescription; }
+        if (restrictions) { query.restrictions = {$in:restrictions}; }
+        if (specialCategory) { query.specialCategory = specialCategory; }
+        if (pharmaciesList) { query.pharmaciesList = {$in: pharmaciesList}; }
 
         let existingCategorie = await Category.find(query);
         if (existingCategorie.length) {
@@ -1496,6 +1493,16 @@ const pharmacyCategoriesCreate = async (req, res) => {
                 return res.status(200).json({ error:1, success:false, errorMessage: 'Une categorie avec ces caracteristiques existe deja', message: 'Le slug existe deja pour une autre categorie' });
             }
         }
+
+        let level = 0;
+        if (parentCategory) {
+            let parentCategoryExist = await Category.findOne({ _id: parentCategory });
+            if (!parentCategoryExist) {
+                return res.status(200).json({ error:1, success:false, errorMessage: 'La categorie parent n\'existe pas', message: 'La categorie parent n\'existe pas'});
+            }
+            level = parentCategoryExist.level + 1;
+        }
+
         const newCategory = new Category({
             name,
             description,
@@ -1509,19 +1516,211 @@ const pharmacyCategoriesCreate = async (req, res) => {
             metaDescription,
             keywords,
             requiresPrescription,
-            ageRestriction,
+            restrictions,
             specialCategory,
             pharmaciesList,
         });
 
         await newCategory.save();
+        await registerActivity('Categorie', newCategory._id, user._id,  "Categorie Ajoutee", "La categorie "+newCategory.name+" a ete ajoute!");
+
         return res.status(200).json({ error:0, success:true, message: 'La categorie a ete cree avec succes', data: newCategory });
 
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }
 }
+const pharmacyCategoryDetail = async(req, res)=> {
+    try {
+        const { id } = req.body;
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
 
+        if (!id) {
+            return res.status(200).json({ error: 1, success: false, message: 'Id de la categorie invalide !', messageError: 'Id de la categorie invalide !' });
+        }
+
+        if (the_admin.error ) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        user = the_admin.the_user;
+        user.photoURL =  user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        let query = {};
+      
+        const catPharmaciesList = user?.groups?.some(g => ['manager_pharmacy', 'pharmacien','preparateur', 'caissier', 'consultant'].includes(g.code)) ? user.pharmaciesManaged.map(pharm => pharm._id) : [];
+        const pharmaciesList = user?.groups?.some(g => ['manager_pharmacy', 'pharmacien','preparateur', 'caissier', 'consultant'].includes(g.code)) ? user.pharmaciesManaged.map(pharm => ({ value: pharm._id, label: pharm.name })) : [];
+
+        if (user?.groups?.some(g => ['manager_pharmacy', 'pharmacien','preparateur', 'caissier', 'consultant'].includes(g.code))) {
+            query.pharmaciesList = { $in: catPharmaciesList };
+        }else{
+            return res.status(200).json({'error':0, putin:'he merde je suis ici', user: user, data: [], query: query });
+        }
+
+        let categories = await Category.find(query).lean();
+
+        let catPerId = {};
+        categories.map((category) => {
+            catPerId[category._id] = category;
+        });
+
+        const category = await Category.findById(id)
+                .populate('parentCategory')
+                .populate('subcategories')
+                .populate('imageUrl')
+                .populate('iconUrl')
+                .populate('pharmaciesList');
+
+        return res.status(200).json({'error':0, user: user, data: category, catPerId:catPerId, pharmaciesList});
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+};
+const categoriesActivities = async (req, res) => {
+    try {
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error ) { return res.status(404).json({ message: 'User not found' }); }
+
+        var user = the_admin.the_user;
+        user.photoURL =  user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        const userInGroupAdmin = Array.isArray(user.groups) && user.groups.length > 0
+            ? user.groups.some(g => ['superadmin', 'manager_admin', 'admin_technique'].includes(g.code))
+            : false;
+
+        let { id, prePage } = req.body;
+        if ( (!id || (Array.isArray(id) && id.length === 0)) && !userInGroupAdmin ) {
+            id = user.pharmaciesManaged?.map( pharm => pharm._id );
+            if (!id) {  return res.status(400).json({ message: 'Missing required fields'}); }
+        }
+
+        let categories = id ? await Category.find( Array.isArray(id) ? {pharmaciesList : {$in : id} } : { _id : id }) : false;
+        if (!categories && !userInGroupAdmin) { 
+            return res.status(404).json({ success: false, message: 'Catégorie non trouvée' });
+        }
+
+        const activities = categories
+            ? await Activity.find({ id_object: categories.map(cat => cat._id) }).sort({ created_at: -1 }).limit(parseInt(prePage) || 10)
+            : await Activity.find().sort({ created_at: -1 }).limit(parseInt(prePage) || 10);
+
+        const mongoose = require('mongoose');
+        const path = require('path');
+        const validAuthorIds = activities
+            ? activities.map(act => act.author).filter(id => mongoose.Types.ObjectId.isValid(id))
+            : [];
+        const users = validAuthorIds.length > 0 ? await Admin.find({ _id: { $in: validAuthorIds } }).lean() : [];
+        const usersMap = {};
+        users.forEach(each => {
+            each.photoURL = each.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(each.name || 'User')}&background=random&size=500`;
+            if (each._id && mongoose.Types.ObjectId.isValid(each._id)) {
+                usersMap[each._id] = {
+                    'name' : each._id.toString() == user._id.toString() ? 'Vous' : each.name+' '+each.surname,
+                    'img' : each.photoURL
+                };
+            }
+        });
+        return res.status(200).json({'error':0, usersMap: usersMap, data: activities, user: user });
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+};
+const categorieUpdate = async (req, res) => {
+    try {
+        let { 
+            id, name, description, slug, parentCategory, subcategories, status, 
+            displayOrder, isVisible, metaTitle, metaDescription, keywords, requiresPrescription, restrictions, specialCategory, pharmaciesList
+        } = req.body;
+
+        if (pharmaciesList) {
+            pharmaciesList = pharmaciesList.filter(p => p != null);
+        }
+
+        if (!id || !name || !slug || !pharmaciesList.length ) {
+            return res.status(200).json({ error: 1, success: false, message: 'Tous les champs obligatoires doivent être renseignés', errorMessage: 'Tous les champs obligatoires doivent être renseignés' });
+        }
+
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error) { 
+            return res.status(404).json({ message: 'User not found' }); 
+        }
+
+        const user = the_admin.the_user;
+        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        const existingCategory = await Category.findById(id);
+        if (!existingCategory) {
+            return res.status(200).json({ error: 1, success: false, message: 'Catégorie non trouvée', errorMessage: 'Catégorie non trouvée' });
+        }
+
+        // Check for duplicate category (excluding current)
+        let duplicateQuery = {
+            _id: { $ne: id },
+            name,
+            slug,
+            pharmaciesList: { $in: pharmaciesList }
+        };
+        let duplicateCategorie = await Category.find(duplicateQuery);
+        if (duplicateCategorie.length) {
+            return res.status(200).json({ error: 1, success: false, errorMessage: 'Une categorie avec ces caracteristiques existe deja', message: 'Une categorie avec ces caracteristiques existe deja' });
+        }
+        if (slug) {
+            let slugExist = await Category.findOne({ _id: { $ne: id }, slug: slug });
+            if (slugExist) {
+                return res.status(200).json({ error: 1, success: false, errorMessage: 'Le slug existe deja pour une autre categorie', message: 'Le slug existe deja pour une autre categorie' });
+            }
+        }
+
+        let level = 0;
+        if (parentCategory) {
+            let parentCategoryExist = await Category.findOne({ _id: parentCategory });
+            if (!parentCategoryExist) {
+                return res.status(200).json({ error: 1, success: false, errorMessage: 'La categorie parent n\'existe pas', message: 'La categorie parent n\'existe pas' });
+            }
+            level = parentCategoryExist.level + 1;
+            existingCategory.level = level;
+        } else {
+            existingCategory.level = 0;
+        }
+
+        let updates = [];
+        const fieldsToCheck = [
+            'name', 'description', 'slug', 'parentCategory', 'subcategories', 'status',
+            'displayOrder', 'isVisible', 'metaTitle', 'metaDescription', 'keywords',
+            'requiresPrescription', 'restrictions', 'specialCategory', 'pharmaciesList'
+        ];
+
+        fieldsToCheck.forEach(field => {
+            if (typeof req.body[field] !== 'undefined') {
+                if (Array.isArray(existingCategory[field]) || Array.isArray(req.body[field])) {
+                    if (JSON.stringify(existingCategory[field] || []) !== JSON.stringify(req.body[field] || [])) {
+                        updates.push(field);
+                        existingCategory[field] = req.body[field];
+                    }
+                } else if (existingCategory[field] != req.body[field]) {
+                    updates.push(field);
+                    existingCategory[field] = req.body[field];
+                }
+            }
+        });
+
+        await existingCategory.save();
+
+        await existingCategory.populate([
+            { path: 'parentCategory' },
+            { path: 'subcategories' },
+            { path: 'imageUrl' },
+            { path: 'iconUrl' },
+            { path: 'pharmaciesList' }
+        ]);
+
+        await registerActivity('Categorie', existingCategory._id, user._id, "Mise a jour Categorie", `Certaines informations de la categorie ${existingCategory.name} ont été mises à jour : ${updates.join(' | ')} `);
+
+        return res.status(200).json({ error: 0, success: true, message: "Categorie mise a jour avec succès!", user: user, data: existingCategory });
+
+    } catch (error) {
+        console.error('Erreur lors de la mise à jour de la categorie:', error);
+        return res.status(500).json({ success: false, error: error.message });
+    }
+};
 
 const loadAllActivitiesAndSendMailAdmins = async (updatedPharmacy, updates, user, extra = '') => {
     let messageToSendToAdmin = `
@@ -1605,7 +1804,6 @@ const loadAllActivitiesAndSendMailAdmins = async (updatedPharmacy, updates, user
         });
     }
 }
-
 const loadHistoricMiniChat = async (req, res) => {
     try {
         var the_admin = await getTheCurrentUserOrFailed(req, res);
@@ -1630,4 +1828,4 @@ const loadHistoricMiniChat = async (req, res) => {
     }
 }
 
-module.exports = { authentificateUser, setProfilInfo, loadGeneralsInfo, loadAllActivities, setSettingsFont, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload, pharmacieUpdate, pharmacieDocumentsUpload, pharmacieWorkingsHours, pharmacieActivities, loadHistoricMiniChat, pharmacyCategoriesList, pharmacieCategorieImagesUpload, pharmacyCategoriesCreate };
+module.exports = { authentificateUser, setProfilInfo, loadGeneralsInfo, loadAllActivities, setSettingsFont, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload, pharmacieUpdate, pharmacieDocumentsUpload, pharmacieWorkingsHours, pharmacieActivities, loadHistoricMiniChat, pharmacyCategoriesList, pharmacieCategorieImagesUpload, pharmacyCategoriesCreate, pharmacyCategoryDetail, categoriesActivities, categorieUpdate };
