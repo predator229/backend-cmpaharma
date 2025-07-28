@@ -4,7 +4,7 @@ const { createAuthMiddleware } = require('@middlewares/auth');
 const {getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse, getUserInfoByEmail, signUpUserWithEmailAndPassword,createUserAndSendEmailLink,deleteUserByEmail, getListCountries} = require('@tools/flutter_tools');
 
 const { verifyFirebaseToken: deliververifyFirebaseToken, injectDeliverType } = createAuthMiddleware('admin');
-const { authentificateUser, setProfilInfo, loadGeneralsInfo, setSettingsFont, loadAllActivities, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload,pharmacieUpdate, pharmacieDocumentsUpload, pharmacieWorkingsHours, pharmacieActivities,loadHistoricMiniChat, pharmacyCategoriesList, pharmacieCategorieImagesUpload, pharmacyCategoriesCreate, pharmacyCategoryDetail, categoriesActivities, categorieUpdate} = require('@controllers/admins/api');
+const { authentificateUser, setProfilInfo, loadGeneralsInfo, setSettingsFont, loadAllActivities, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload,pharmacieUpdate, pharmacieDocumentsUpload, pharmacieWorkingsHours, pharmacieActivities,loadHistoricMiniChat, pharmacyCategoriesList, pharmacieCategorieImagesUpload, pharmacyCategoriesCreate, pharmacyCategoryDetail, categoriesActivities, categorieUpdate, categorieDelete, pharmacyCategoriesImport, pharmacyProductsList, pharmacyProductsCreate, productsActivities, uploadProductImages, productsAdvancedSearch, productsStats, pharmacyProductsImport, pharmacyProductDetail, productUpdate, productDelete} = require('@controllers/admins/api');
 const {checkPharmacyInfo, checkPharmacyOwnerInfo} = require('@controllers/guest/api');
 const upload = require('@middlewares/uploadRoutes');
 
@@ -71,7 +71,20 @@ router.post('/pharmacy-management/categories/create', deliververifyFirebaseToken
 router.post('/pharmacy-managment/pharmacies/upload-images-cat', deliververifyFirebaseToken, upload.single('file'), pharmacieCategorieImagesUpload);
 router.post('/pharmacy-managment/categories/activities', deliververifyFirebaseToken, categoriesActivities);
 router.post('/pharmacy-management/categories/update', deliververifyFirebaseToken, categorieUpdate);
+router.post('/pharmacy-management/categories/delete', deliververifyFirebaseToken, categorieDelete);
+router.post('/pharmacy-management/categories/import', deliververifyFirebaseToken, pharmacyCategoriesImport);
 
+// Routes produits
+router.post('/pharmacy-management/products/list',deliververifyFirebaseToken, pharmacyProductsList);
+router.post('/pharmacy-management/products/create',deliververifyFirebaseToken, pharmacyProductsCreate);
+router.post('/pharmacy-management/products/import',deliververifyFirebaseToken, pharmacyProductsImport);
+router.post('/pharmacy-management/products/detail',deliververifyFirebaseToken, pharmacyProductDetail);
+router.post('/pharmacy-management/products/update',deliververifyFirebaseToken, productUpdate);
+router.post('/pharmacy-management/products/delete',deliververifyFirebaseToken, productDelete);
+router.post('/pharmacy-management/products/activities',deliververifyFirebaseToken, productsActivities);
+router.post('/pharmacy-management/products/upload-images', deliververifyFirebaseToken, upload.single('file'), uploadProductImages);
+router.post('/pharmacy-management/products/search',deliververifyFirebaseToken, productsAdvancedSearch);
+router.post('/pharmacy-management/products/stats',deliververifyFirebaseToken, productsStats);
 //tools
 router.post('/tools/get-countries-list' , getListCountries);
 

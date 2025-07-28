@@ -20,6 +20,7 @@ const DeliveryZone = require('@models/DeliveryZone');
 const ZoneCoordinates = require('@models/ZoneCoordinates');
 const File = require('@models/File');
 const Category = require('@models/Category');
+const Product = require('@models/Product');
 
 const path = require('path');
 
@@ -849,12 +850,29 @@ const pharmacieCategorieImagesUpload = async (req, res) => {
             { path: 'imageUrl'},
             { path: 'iconUrl'},
             { path: 'parentCategory'},
-            {path: 'pharmaciesList'},
+            { path: 'pharmaciesList', populate : [
+                    { path: 'location'},
+                    { path: 'country'},
+                    { path: 'workingHours'},
+                    {path: 'deliveryZone', populate: [
+                        { path: 'coordinates', populate: [
+                            {path: 'points'},
+                        ]},
+                    ]},
+                    { path: 'documents', populate: [
+                        { path: 'logo'},
+                        { path: 'license'},
+                        { path: 'idDocument'},
+                        { path: 'insurance'},
+                    ]},
+                ],
+            },
             { path: 'subcategories'}
         ]);
 
         // if (type_ != 'chat_pharm_apartment'){
             // await loadAllActivitiesAndSendMailAdmins(pharmacy, ['document'], user, type_);
+            await registerActivity('Categorie', category._id, user._id, "Mise a jour Categorie", `L\'${ type_ == 'imageUrl' ? 'image' : 'icone' } de la categorie ${category.name} a été mise à jour !`);
         // }
         res.json({ error: 0, success: true, fileId: file_._id,  user: user, data: category, message: `Document ${type_} pour la pharmacie ${category.name} uploadé avec succès sur le serveur` });
     } catch (error) {
@@ -1406,7 +1424,6 @@ const pharmacyCategoriesList = async(req, res)=> {
 
         let query = {};
       
-        if (status) { query.status = status;}
         if (level) { query.level = level; }
        
         if (search) {
@@ -1432,13 +1449,33 @@ const pharmacyCategoriesList = async(req, res)=> {
             return res.status(200).json({'error':0, putin:'he merde je suis ici', user: user, data: [], query: query });
         }
 
+        query.status = { $nin : ['deleted'] };
+
         let categories = await Category.find(query)
-                .populate('parentCategory')
-                .populate('subcategories')
-                .populate('imageUrl')
-                .populate('iconUrl')
-                .populate('pharmaciesList')
-                .lean();
+                                .populate([
+                                { path: 'imageUrl'},
+                                { path: 'iconUrl'},
+                                { path: 'parentCategory'},
+                                { path: 'pharmaciesList', populate : [
+                                        { path: 'location'},
+                                        { path: 'country'},
+                                        { path: 'workingHours'},
+                                        {path: 'deliveryZone', populate: [
+                                            { path: 'coordinates', populate: [
+                                                {path: 'points'},
+                                            ]},
+                                        ]},
+                                        { path: 'documents', populate: [
+                                            { path: 'logo'},
+                                            { path: 'license'},
+                                            { path: 'idDocument'},
+                                            { path: 'insurance'},
+                                        ]},
+                                    ],
+                                },
+                                { path: 'subcategories'}
+                            ])
+                            .lean();
 
         let catPerId = {};
         categories.map((category) => {
@@ -1450,7 +1487,6 @@ const pharmacyCategoriesList = async(req, res)=> {
         return res.status(500).json({ error: error.message });
     }
 };
-
 const pharmacyCategoriesCreate = async (req, res) => {
     try {
         const { name, description, slug, parentCategory, status, displayOrder, isVisible, metaTitle, metaDescription, keywords, requiresPrescription, restrictions, specialCategory, pharmaciesList} = req.body;
@@ -1482,33 +1518,24 @@ const pharmacyCategoriesCreate = async (req, res) => {
         if (specialCategory) { query.specialCategory = specialCategory; }
         if (pharmaciesList) { query.pharmaciesList = {$in: pharmaciesList}; }
 
+        query.status = { $nin : ['deleted'] };
+
         let existingCategorie = await Category.find(query);
         if (existingCategorie.length) {
             return res.status(200).json({ error:1, success:false, errorMessage: 'Une categorie avec ces caracteristiques existe deja' , message: 'Une categorie avec ces caracteristiques existe deja' });
         }
 
         if (slug){
-            let slugExist = await Category.findOne({ slug: slug });
+            let slugExist = await Category.findOne({ slug: slug, status: { $nin : ['deleted'] } });
             if (slugExist){
                 return res.status(200).json({ error:1, success:false, errorMessage: 'Une categorie avec ces caracteristiques existe deja', message: 'Le slug existe deja pour une autre categorie' });
             }
-        }
-
-        let level = 0;
-        if (parentCategory) {
-            let parentCategoryExist = await Category.findOne({ _id: parentCategory });
-            if (!parentCategoryExist) {
-                return res.status(200).json({ error:1, success:false, errorMessage: 'La categorie parent n\'existe pas', message: 'La categorie parent n\'existe pas'});
-            }
-            level = parentCategoryExist.level + 1;
         }
 
         const newCategory = new Category({
             name,
             description,
             slug,
-            parentCategory,
-            level,
             status,
             displayOrder,
             isVisible,
@@ -1521,10 +1548,238 @@ const pharmacyCategoriesCreate = async (req, res) => {
             pharmaciesList,
         });
 
+        if (parentCategory) {
+            let parentCategoryExist = await Category.findOne({ _id: parentCategory, status: { $nin : ['deleted'] } });
+            if (!parentCategoryExist) {
+                return res.status(200).json({ error:1, success:false, errorMessage: 'La categorie parent n\'existe pas', message: 'La categorie parent n\'existe pas'});
+            }
+            newCategory.level = parentCategoryExist.level + 1;
+            newCategory.parentCategory = parentCategoryExist._id;
+        }
+
+        
         await newCategory.save();
+        await newCategory
+            .populate([
+            { path: 'imageUrl'},
+            { path: 'iconUrl'},
+            { path: 'parentCategory'},
+            { path: 'pharmaciesList', populate : [
+                    { path: 'location'},
+                    { path: 'country'},
+                    { path: 'workingHours'},
+                    {path: 'deliveryZone', populate: [
+                        { path: 'coordinates', populate: [
+                            {path: 'points'},
+                        ]},
+                    ]},
+                    { path: 'documents', populate: [
+                        { path: 'logo'},
+                        { path: 'license'},
+                        { path: 'idDocument'},
+                        { path: 'insurance'},
+                    ]},
+                ],
+            },
+            { path: 'subcategories'}
+        ]);
         await registerActivity('Categorie', newCategory._id, user._id,  "Categorie Ajoutee", "La categorie "+newCategory.name+" a ete ajoute!");
 
         return res.status(200).json({ error:0, success:true, message: 'La categorie a ete cree avec succes', data: newCategory });
+
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+}
+const pharmacyCategoriesImport = async (req, res) => {
+    try {
+        const { categories } = req.body;
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+
+        if (the_admin.error) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        user = the_admin.the_user;
+        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        if (!categories || !Array.isArray(categories) || categories.length === 0) {
+            return res.status(200).json({ 
+                error: 1, 
+                success: false, 
+                errorMessage: 'Aucune catégorie à importer', 
+                message: 'Aucune catégorie à importer' 
+            });
+        }
+
+        let importResults = {
+            total: categories.length,
+            success: 0,
+            errors: 0,
+            errorDetails: []
+        };
+
+        let createdCategories = [];
+
+        // Traitement séquentiel pour éviter les conflits
+        for (let i = 0; i < categories.length; i++) {
+            const categoryData = categories[i];
+            
+            try {
+                // Validation des champs obligatoires
+                if (!categoryData.name || !categoryData.slug || !categoryData.status || 
+                    !categoryData.specialCategory || !categoryData.pharmaciesList) {
+                    importResults.errors++;
+                    importResults.errorDetails.push({
+                        row: i + 1,
+                        name: categoryData.name || 'Non défini',
+                        error: 'Champs obligatoires manquants (name, slug, status, specialCategory, pharmaciesList)'
+                    });
+                    continue;
+                }
+
+                // Vérification de l'existence basée sur le nom et le slug
+                let existingByName = await Category.findOne({ 
+                    name: categoryData.name, 
+                    status: { $nin: ['deleted'] } 
+                });
+
+                let existingBySlug = await Category.findOne({ 
+                    slug: categoryData.slug, 
+                    status: { $nin: ['deleted'] } 
+                });
+
+                if (existingByName) {
+                    importResults.errors++;
+                    importResults.errorDetails.push({
+                        row: i + 1,
+                        name: categoryData.name,
+                        error: 'Une catégorie avec ce nom existe déjà'
+                    });
+                    continue;
+                }
+
+                if (existingBySlug) {
+                    importResults.errors++;
+                    importResults.errorDetails.push({
+                        row: i + 1,
+                        name: categoryData.name,
+                        error: 'Une catégorie avec ce slug existe déjà'
+                    });
+                    continue;
+                }
+
+                // Création de la nouvelle catégorie
+                const newCategory = new Category({
+                    name: categoryData.name,
+                    description: categoryData.description || '',
+                    slug: categoryData.slug,
+                    status: categoryData.status || 'active',
+                    displayOrder: categoryData.displayOrder || 0,
+                    isVisible: categoryData.isVisible !== undefined ? categoryData.isVisible : true,
+                    metaTitle: categoryData.metaTitle || '',
+                    metaDescription: categoryData.metaDescription || '',
+                    keywords: categoryData.keywords || [],
+                    requiresPrescription: categoryData.requiresPrescription || false,
+                    restrictions: categoryData.restrictions || [],
+                    specialCategory: categoryData.specialCategory,
+                    pharmaciesList: categoryData.pharmaciesList,
+                    level: 0 // Par défaut niveau 0
+                });
+
+                // Gestion de la catégorie parent
+                if (categoryData.parentCategory) {
+                    let parentCategoryExist = await Category.findOne({ 
+                        _id: categoryData.parentCategory, 
+                        status: { $nin: ['deleted'] } 
+                    });
+                    
+                    if (!parentCategoryExist) {
+                        importResults.errors++;
+                        importResults.errorDetails.push({
+                            row: i + 1,
+                            name: categoryData.name,
+                            error: 'La catégorie parent spécifiée n\'existe pas'
+                        });
+                        continue;
+                    }
+                    
+                    newCategory.level = parentCategoryExist.level + 1;
+                    newCategory.parentCategory = parentCategoryExist._id;
+                }
+
+                // Sauvegarde
+                await newCategory.save();
+                
+                // Population des données
+                await newCategory.populate([
+                    { path: 'imageUrl' },
+                    { path: 'iconUrl' },
+                    { path: 'parentCategory' },
+                    { 
+                        path: 'pharmaciesList', 
+                        populate: [
+                            { path: 'location' },
+                            { path: 'country' },
+                            { path: 'workingHours' },
+                            {
+                                path: 'deliveryZone', 
+                                populate: [
+                                    { 
+                                        path: 'coordinates', 
+                                        populate: [
+                                            { path: 'points' }
+                                        ]
+                                    }
+                                ]
+                            },
+                            { 
+                                path: 'documents', 
+                                populate: [
+                                    { path: 'logo' },
+                                    { path: 'license' },
+                                    { path: 'idDocument' },
+                                    { path: 'insurance' }
+                                ]
+                            }
+                        ]
+                    },
+                    { path: 'subcategories' }
+                ]);
+
+                // Enregistrement de l'activité
+                await registerActivity(
+                    'Categorie', 
+                    newCategory._id, 
+                    user._id, 
+                    "Categorie Importée", 
+                    `La catégorie ${newCategory.name} a été importée avec succès!`
+                );
+
+                createdCategories.push(newCategory);
+                importResults.success++;
+
+            } catch (categoryError) {
+                importResults.errors++;
+                importResults.errorDetails.push({
+                    row: i + 1,
+                    name: categoryData.name || 'Non défini',
+                    error: categoryError.message || 'Erreur inconnue lors de la création'
+                });
+            }
+        }
+
+        // Réponse finale
+        const message = `Importation terminée: ${importResults.success} succès, ${importResults.errors} erreurs sur ${importResults.total} catégories`;
+        
+        return res.status(200).json({ 
+            error: importResults.errors > 0 ? 1 : 0,
+            success: importResults.success > 0,
+            message: message,
+            data: {
+                results: importResults,
+                createdCategories: createdCategories
+            }
+        });
 
     } catch (error) {
         return res.status(500).json({ error: error.message });
@@ -1556,6 +1811,7 @@ const pharmacyCategoryDetail = async(req, res)=> {
             return res.status(200).json({'error':0, putin:'he merde je suis ici', user: user, data: [], query: query });
         }
 
+        query.status = { $nin : ['deleted'] };
         let categories = await Category.find(query).lean();
 
         let catPerId = {};
@@ -1563,12 +1819,30 @@ const pharmacyCategoryDetail = async(req, res)=> {
             catPerId[category._id] = category;
         });
 
-        const category = await Category.findById(id)
-                .populate('parentCategory')
-                .populate('subcategories')
-                .populate('imageUrl')
-                .populate('iconUrl')
-                .populate('pharmaciesList');
+        const category = await Category.findOne({ _id : id, status: { $nin : ['deleted'] }}).
+               populate([
+                    { path: 'imageUrl'},
+                    { path: 'iconUrl'},
+                    { path: 'parentCategory'},
+                    { path: 'pharmaciesList', populate : [
+                            { path: 'location'},
+                            { path: 'country'},
+                            { path: 'workingHours'},
+                            {path: 'deliveryZone', populate: [
+                                { path: 'coordinates', populate: [
+                                    {path: 'points'},
+                                ]},
+                            ]},
+                            { path: 'documents', populate: [
+                                { path: 'logo'},
+                                { path: 'license'},
+                                { path: 'idDocument'},
+                                { path: 'insurance'},
+                            ]},
+                        ],
+                    },
+                    { path: 'subcategories'}
+                ]);
 
         return res.status(200).json({'error':0, user: user, data: category, catPerId:catPerId, pharmaciesList});
     } catch (error) {
@@ -1593,7 +1867,7 @@ const categoriesActivities = async (req, res) => {
             if (!id) {  return res.status(400).json({ message: 'Missing required fields'}); }
         }
 
-        let categories = id ? await Category.find( Array.isArray(id) ? {pharmaciesList : {$in : id} } : { _id : id }) : false;
+        let categories = id ? await Category.find( Array.isArray(id) ? {status: { $nin : ['deleted'] }, pharmaciesList : {$in : id} } : { _id : id, status: { $nin : ['deleted'] } }) : false;
         if (!categories && !userInGroupAdmin) { 
             return res.status(404).json({ success: false, message: 'Catégorie non trouvée' });
         }
@@ -1626,16 +1900,31 @@ const categoriesActivities = async (req, res) => {
 const categorieUpdate = async (req, res) => {
     try {
         let { 
-            id, name, description, slug, parentCategory, subcategories, status, 
+            _id, type_, name, description, slug, parentCategory, subcategories, status, 
             displayOrder, isVisible, metaTitle, metaDescription, keywords, requiresPrescription, restrictions, specialCategory, pharmaciesList
         } = req.body;
 
-        if (pharmaciesList) {
-            pharmaciesList = pharmaciesList.filter(p => p != null);
+        if (!type_ || !_id) {
+            return res.status(200).json({ error: 1, success: false, message: 'Tous les champs obligatoires doivent être renseignés', errorMessage: 'Tous les champs obligatoires doivent être renseignés' });
         }
 
-        if (!id || !name || !slug || !pharmaciesList.length ) {
-            return res.status(200).json({ error: 1, success: false, message: 'Tous les champs obligatoires doivent être renseignés', errorMessage: 'Tous les champs obligatoires doivent être renseignés' });
+        let fieldsToCheck = [];
+
+        switch (type_) {
+            case 1:
+                fieldsToCheck = [
+                    'name', 'description', 'slug', 'parentCategory', 'status',
+                    'displayOrder', 'isVisible', 'metaTitle', 'metaDescription', 'keywords',
+                    'requiresPrescription', 'restrictions', 'specialCategory'
+                ];
+                if (!name || !slug) { return res.status(200).json({ error: 1, success: false, message: 'Tous les champs obligatoires doivent être renseignés', errorMessage: 'Tous les champs obligatoires doivent être renseignés' });}
+                break;
+
+            case 2:
+                fieldsToCheck = ['pharmaciesList'];
+                if (!pharmaciesList) { return res.status(200).json({ error: 1, success: false, message: 'Tous les champs obligatoires doivent être renseignés', errorMessage: 'Tous les champs obligatoires doivent être renseignés' }); }
+                break;
+            default: break;
         }
 
         var the_admin = await getTheCurrentUserOrFailed(req, res);
@@ -1646,24 +1935,14 @@ const categorieUpdate = async (req, res) => {
         const user = the_admin.the_user;
         user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
 
-        const existingCategory = await Category.findById(id);
+        const existingCategory = await Category.findOne({_id : _id, status: { $nin : ['deleted'] }});
         if (!existingCategory) {
             return res.status(200).json({ error: 1, success: false, message: 'Catégorie non trouvée', errorMessage: 'Catégorie non trouvée' });
         }
 
         // Check for duplicate category (excluding current)
-        let duplicateQuery = {
-            _id: { $ne: id },
-            name,
-            slug,
-            pharmaciesList: { $in: pharmaciesList }
-        };
-        let duplicateCategorie = await Category.find(duplicateQuery);
-        if (duplicateCategorie.length) {
-            return res.status(200).json({ error: 1, success: false, errorMessage: 'Une categorie avec ces caracteristiques existe deja', message: 'Une categorie avec ces caracteristiques existe deja' });
-        }
         if (slug) {
-            let slugExist = await Category.findOne({ _id: { $ne: id }, slug: slug });
+            let slugExist = await Category.findOne({ _id: { $ne: _id }, slug: slug, status: { $nin : ['deleted'] } });
             if (slugExist) {
                 return res.status(200).json({ error: 1, success: false, errorMessage: 'Le slug existe deja pour une autre categorie', message: 'Le slug existe deja pour une autre categorie' });
             }
@@ -1671,7 +1950,7 @@ const categorieUpdate = async (req, res) => {
 
         let level = 0;
         if (parentCategory) {
-            let parentCategoryExist = await Category.findOne({ _id: parentCategory });
+            let parentCategoryExist = await Category.findOne({ _id: parentCategory, status: { $nin : ['deleted'] } });
             if (!parentCategoryExist) {
                 return res.status(200).json({ error: 1, success: false, errorMessage: 'La categorie parent n\'existe pas', message: 'La categorie parent n\'existe pas' });
             }
@@ -1682,12 +1961,6 @@ const categorieUpdate = async (req, res) => {
         }
 
         let updates = [];
-        const fieldsToCheck = [
-            'name', 'description', 'slug', 'parentCategory', 'subcategories', 'status',
-            'displayOrder', 'isVisible', 'metaTitle', 'metaDescription', 'keywords',
-            'requiresPrescription', 'restrictions', 'specialCategory', 'pharmaciesList'
-        ];
-
         fieldsToCheck.forEach(field => {
             if (typeof req.body[field] !== 'undefined') {
                 if (Array.isArray(existingCategory[field]) || Array.isArray(req.body[field])) {
@@ -1697,22 +1970,40 @@ const categorieUpdate = async (req, res) => {
                     }
                 } else if (existingCategory[field] != req.body[field]) {
                     updates.push(field);
-                    existingCategory[field] = req.body[field];
+                    existingCategory[field] = field === 'keywords' ? (Array.isArray(req.body.keywords) ? req.body.keywords : typeof req.body.keywords === 'string' ? req.body.keywords.split(',').map(k => k.trim()).filter(Boolean) : []) : req.body[field];
                 }
             }
         });
 
         await existingCategory.save();
+        await existingCategory.
+            populate([
+                { path: 'imageUrl'},
+                { path: 'iconUrl'},
+                { path: 'parentCategory'},
+                { path: 'pharmaciesList', populate : [
+                        { path: 'location'},
+                        { path: 'country'},
+                        { path: 'workingHours'},
+                        {path: 'deliveryZone', populate: [
+                            { path: 'coordinates', populate: [
+                                {path: 'points'},
+                            ]},
+                        ]},
+                        { path: 'documents', populate: [
+                            { path: 'logo'},
+                            { path: 'license'},
+                            { path: 'idDocument'},
+                            { path: 'insurance'},
+                        ]},
+                    ],
+                },
+                { path: 'subcategories'}
+            ]);
 
-        await existingCategory.populate([
-            { path: 'parentCategory' },
-            { path: 'subcategories' },
-            { path: 'imageUrl' },
-            { path: 'iconUrl' },
-            { path: 'pharmaciesList' }
-        ]);
-
-        await registerActivity('Categorie', existingCategory._id, user._id, "Mise a jour Categorie", `Certaines informations de la categorie ${existingCategory.name} ont été mises à jour : ${updates.join(' | ')} `);
+        if (updates){
+            await registerActivity('Categorie', existingCategory._id, user._id, "Mise a jour Categorie", `Certaines informations de la categorie ${existingCategory.name} ont été mises à jour : ${updates.join(' | ')} `);
+        }
 
         return res.status(200).json({ error: 0, success: true, message: "Categorie mise a jour avec succès!", user: user, data: existingCategory });
 
@@ -1721,7 +2012,1231 @@ const categorieUpdate = async (req, res) => {
         return res.status(500).json({ success: false, error: error.message });
     }
 };
+const categorieDelete = async (req, res) => {
+    try {
+        let { _id} = req.body;
 
+        if (!_id) {
+            return res.status(200).json({ error: 1, success: false, message: 'La catégorie n\'a pu etre identifiée', errorMessage: 'La catégorie n\'a pu etre identifiée' });
+        }
+
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error) { 
+            return res.status(404).json({ message: 'User not found' }); 
+        }
+
+        const user = the_admin.the_user;
+        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        const existingCategory = await Category.findOne({_id : _id, status: { $nin : ['deleted'] }});
+        if (!existingCategory) {
+            return res.status(200).json({ error: 1, success: false, message: 'Catégorie non trouvée', errorMessage: 'Catégorie non trouvée' });
+        }
+
+       existingCategory.status = 'deleted';
+
+        await existingCategory.save();
+        await registerActivity('Categorie', existingCategory._id, user._id, "Suppression Categorie", `La catégorie ${existingCategory.name} a été supprimer par ${user.name} `);
+        
+        return res.status(200).json({ error: 0, success: true, message: "Categorie supprimé avec success!", user: user });
+    } catch (error) {
+        console.error('Erreur lors de la mise à jour de la categorie:', error);
+        return res.status(500).json({ success: false, error: error.message });
+    }
+};
+const pharmacyProductsList = async (req, res) => {
+    try {
+        const { status, categoryId, pharmaciesId, search, requiresPrescription } = req.body;
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+
+        if (the_admin.error) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        
+        const user = the_admin.the_user;
+        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        let query = {};
+
+        // Filtres de base
+        if (status) { 
+            query.status = status; 
+        }
+        
+        if (categoryId) { 
+            query.categories = { $in: [categoryId] }; 
+        }
+
+        if (requiresPrescription !== undefined) {
+            query.requiresPrescription = requiresPrescription === 'true' || requiresPrescription === true;
+        }
+
+        // Recherche textuelle
+        if (search) {
+            const cleanedSearch = search.replace(/\s+/g, '').trim();
+            const regex = new RegExp(cleanedSearch, 'i');
+            query.$or = [
+                { name: regex },
+                { description: regex },
+                { shortDescription: regex },
+                { sku: regex },
+                { barcode: regex },
+                { laboratoire: regex },
+                { marque: regex },
+                { cipCode: regex }
+            ];
+        }
+
+        // Gestion des pharmacies selon les droits utilisateur
+        const userPharmaciesList = user?.groups?.some(g => ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].includes(g.code)) 
+            ? user.pharmaciesManaged.map(pharm => pharm._id) 
+            : [];
+        const pharmaciesList = user?.groups?.some(g => ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].includes(g.code)) 
+            ? user.pharmaciesManaged.map(pharm => ({ value: pharm._id, label: pharm.name })) 
+            : [];
+
+        if (pharmaciesId) {
+            query['pharmacies.pharmacy'] = { $in: pharmaciesId };
+        } else if (user?.groups?.some(g => ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].includes(g.code))) {
+            query['pharmacies.pharmacy'] = { $in: userPharmaciesList };
+        } else {
+            return res.status(200).json({ 'error': 0, data: [], query: query, user: user });
+        }
+
+        query.status = { $nin: ['deleted'] };
+
+        let products = await Product.find(query)
+            .populate([
+                { path: 'categories' },
+                { path: 'mainImage' },
+                { path: 'images' },
+                {
+                    path: 'pharmacies.pharmacy',
+                    populate: [
+                        { path: 'location' },
+                        { path: 'country' },
+                        { path: 'workingHours' },
+                        {
+                            path: 'deliveryZone',
+                            populate: [
+                                {
+                                    path: 'coordinates',
+                                    populate: [
+                                        { path: 'points' }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            path: 'documents',
+                            populate: [
+                                { path: 'logo' },
+                                { path: 'license' },
+                                { path: 'idDocument' },
+                                { path: 'insurance' }
+                            ]
+                        }
+                    ]
+                }
+            ])
+            .lean();
+
+        return res.status(200).json({
+            'error': 0,
+            user: user,
+            data: products,
+            pharmaciesList
+        });
+
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+};
+// Création d'un produit
+const productsActivities = async (req, res) => {
+    try {
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        var user = the_admin.the_user;
+        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        const userInGroupAdmin = Array.isArray(user.groups) && user.groups.length > 0
+            ? user.groups.some(g => ['superadmin', 'manager_admin', 'admin_technique'].includes(g.code))
+            : false;
+
+        let { id, prePage } = req.body;
+        if ((!id || (Array.isArray(id) && id.length === 0)) && !userInGroupAdmin) {
+            id = user.pharmaciesManaged?.map(pharm => pharm._id);
+            if (!id) {
+                return res.status(400).json({ message: 'Missing required fields' });
+            }
+        }
+
+        let products = id ? await Product.find(
+            Array.isArray(id)
+                ? { status: { $nin: ['deleted'] }, 'pharmacies.pharmacy': { $in: id } }
+                : { _id: id, status: { $nin: ['deleted'] } }
+        ) : false;
+
+        if (!products && !userInGroupAdmin) {
+            return res.status(404).json({ success: false, message: 'Produit non trouvé' });
+        }
+
+        const activities = products
+            ? await Activity.find({ id_object: products.map(prod => prod._id) }).sort({ created_at: -1 }).limit(parseInt(prePage) || 10)
+            : await Activity.find().sort({ created_at: -1 }).limit(parseInt(prePage) || 10);
+
+        const mongoose = require('mongoose');
+        const path = require('path');
+        const validAuthorIds = activities
+            ? activities.map(act => act.author).filter(id => mongoose.Types.ObjectId.isValid(id))
+            : [];
+        const users = validAuthorIds.length > 0 ? await Admin.find({ _id: { $in: validAuthorIds } }).lean() : [];
+        const usersMap = {};
+        users.forEach(each => {
+            each.photoURL = each.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(each.name || 'User')}&background=random&size=500`;
+            if (each._id && mongoose.Types.ObjectId.isValid(each._id)) {
+                usersMap[each._id] = {
+                    'name': each._id.toString() == user._id.toString() ? 'Vous' : each.name + ' ' + each.surname,
+                    'img': each.photoURL
+                };
+            }
+        });
+        return res.status(200).json({ 'error': 0, usersMap: usersMap, data: activities, user: user });
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+};
+const uploadProductImages = async (req, res) => {
+    try {
+        const { productId, type_ } = req.body;
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+
+        req.body.type = "admin"
+
+        if (the_admin.error) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        const user = the_admin.the_user;
+
+        if (!productId || !type_) {
+            return res.status(200).json({error: 1,success: false,message: 'Paramètres manquants',errorMessage: 'Paramètres manquants'});
+        }
+
+        const product = await Product.findOne({ _id: productId, status: { $nin: ['deleted'] } });
+        if (!product) {
+            return res.status(200).json({ error: 1, success: false, message: 'Produit non trouvé', errorMessage: 'Produit non trouvé'
+            });
+        }
+
+        // Ici vous devriez traiter l'upload du fichier selon votre système de fichiers
+        // Exemple avec multer ou autre système d'upload
+        if (!req.file) {
+            return res.status(200).json({
+                error: 1,
+                success: false,
+                message: 'Aucun fichier uploadé',
+                errorMessage: 'Aucun fichier uploadé'
+            });
+        }
+
+        // Créer l'objet File selon votre modèle
+        const newFile = new File({
+            originalName: req.file.originalname,
+            filename: req.file.filename,
+            path: req.file.path,
+            size: req.file.size,
+            mimetype: req.file.mimetype,
+            uploadedBy: user._id
+        });
+
+        await newFile.save();
+
+        // Mettre à jour le produit selon le type d'image
+        if (type_ === 'mainImage') {
+            product.mainImage = newFile._id;
+        } else if (type_.startsWith('images_')) {
+            if (!product.images) {
+                product.images = [];
+            }
+            product.images.push(newFile._id);
+        }
+
+        await product.save();
+
+        await registerActivity('Product', product._id, user._id, "Image Ajoutée", `Une image a été ajoutée au produit ${product.name}`);
+
+        return res.status(200).json({
+            error: 0,
+            success: true,
+            message: 'Image uploadée avec succès',
+            data: {
+                fileId: newFile._id,
+                file: newFile
+            }
+        });
+
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+};
+const productsAdvancedSearch = async (req, res) => {
+    try {
+        const {
+            search, categories, minPrice, maxPrice, laboratoire, marque,
+            requiresPrescription, drugForm, therapeuticClass, inStock,
+            pharmaciesId, sortBy, sortOrder, page, limit
+        } = req.body;
+
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+
+        if (the_admin.error) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        const user = the_admin.the_user;
+        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        let query = { status: { $nin: ['deleted'] } };
+
+        // Gestion des pharmacies selon les droits utilisateur
+        const userPharmaciesList = user?.groups?.some(g => ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].includes(g.code))
+            ? user.pharmaciesManaged.map(pharm => pharm._id)
+            : [];
+
+        if (pharmaciesId) {
+            query['pharmacies.pharmacy'] = { $in: pharmaciesId };
+        } else if (user?.groups?.some(g => ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].includes(g.code))) {
+            query['pharmacies.pharmacy'] = { $in: userPharmaciesList };
+        }
+
+        // Recherche textuelle
+        if (search) {
+            const regex = new RegExp(search.trim(), 'i');
+            query.$or = [
+                { name: regex },
+                { description: regex },
+                { shortDescription: regex },
+                { sku: regex },
+                { barcode: regex },
+                { laboratoire: regex },
+                { marque: regex }
+            ];
+        }
+
+        // Filtres spécifiques
+        if (categories && categories.length > 0) {
+            query.categories = { $in: categories };
+        }
+
+        if (minPrice !== undefined || maxPrice !== undefined) {
+            query.price = {};
+            if (minPrice !== undefined) query.price.$gte = minPrice;
+            if (maxPrice !== undefined) query.price.$lte = maxPrice;
+        }
+
+        if (laboratoire) {
+            query.laboratoire = new RegExp(laboratoire.trim(), 'i');
+        }
+
+        if (marque) {
+            query.marque = new RegExp(marque.trim(), 'i');
+        }
+
+        if (requiresPrescription !== undefined) {
+            query.requiresPrescription = requiresPrescription;
+        }
+
+        if (drugForm) {
+            query.drugForm = drugForm;
+        }
+
+        if (therapeuticClass) {
+            query.therapeuticClass = new RegExp(therapeuticClass.trim(), 'i');
+        }
+
+        if (inStock !== undefined) {
+            if (inStock) {
+                query.status = { $nin: ['deleted', 'out_of_stock', 'discontinued'] };
+            }
+        }
+
+        // Pagination
+        const pageNumber = parseInt(page) || 1;
+        const limitNumber = parseInt(limit) || 20;
+        const skip = (pageNumber - 1) * limitNumber;
+
+        // Tri
+        let sort = {};
+        if (sortBy) {
+            sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+        } else {
+            sort.createdAt = -1; // Par défaut, tri par date de création décroissante
+        }
+
+        const products = await Product.find(query)
+            .populate([
+                { path: 'categories' },
+                { path: 'mainImage' },
+                { path: 'images' },
+                {
+                    path: 'pharmacies.pharmacy',
+                    select: 'name location'
+                }
+            ])
+            .sort(sort)
+            .skip(skip)
+            .limit(limitNumber)
+            .lean();
+
+        const totalProducts = await Product.countDocuments(query);
+        const totalPages = Math.ceil(totalProducts / limitNumber);
+
+        return res.status(200).json({
+            error: 0,
+            user: user,
+            data: products,
+            pagination: {
+                currentPage: pageNumber,
+                totalPages: totalPages,
+                totalProducts: totalProducts,
+                limit: limitNumber,
+                hasNext: pageNumber < totalPages,
+                hasPrev: pageNumber > 1
+            }
+        });
+
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+};
+const productsStats = async (req, res) => {
+    try {
+        const { pharmaciesId } = req.body;
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+
+        if (the_admin.error) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        const user = the_admin.the_user;
+        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        let query = { status: { $nin: ['deleted'] } };
+
+        // Gestion des pharmacies selon les droits utilisateur
+        const userPharmaciesList = user?.groups?.some(g => ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].includes(g.code))
+            ? user.pharmaciesManaged.map(pharm => pharm._id)
+            : [];
+
+        if (pharmaciesId) {
+            query['pharmacies.pharmacy'] = { $in: pharmaciesId };
+        } else if (user?.groups?.some(g => ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].includes(g.code))) {
+            query['pharmacies.pharmacy'] = { $in: userPharmaciesList };
+        }
+
+        // Statistiques générales
+        const totalProducts = await Product.countDocuments(query);
+        const activeProducts = await Product.countDocuments({ ...query, status: 'active' });
+        const inactiveProducts = await Product.countDocuments({ ...query, status: 'inactive' });
+        const outOfStockProducts = await Product.countDocuments({ ...query, status: 'out_of_stock' });
+        const prescriptionProducts = await Product.countDocuments({ ...query, requiresPrescription: true });
+        const featuredProducts = await Product.countDocuments({ ...query, isFeatured: true });
+
+        // Statistiques par catégorie
+        const productsByCategory = await Product.aggregate([
+            { $match: query },
+            { $unwind: '$categories' },
+            { $group: { _id: '$categories', count: { $sum: 1 } } },
+            { $lookup: { from: 'categories', localField: '_id', foreignField: '_id', as: 'category' } },
+            { $unwind: '$category' },
+            { $project: { categoryName: '$category.name', count: 1 } },
+            { $sort: { count: -1 } },
+            { $limit: 10 }
+        ]);
+
+        // Statistiques par laboratoire
+        const productsByLaboratoire = await Product.aggregate([
+            { $match: { ...query, laboratoire: { $exists: true, $ne: '', $ne: null } } },
+            { $group: { _id: '$laboratoire', count: { $sum: 1 } } },
+            { $sort: { count: -1 } },
+            { $limit: 10 }
+        ]);
+
+        // Statistiques de prix
+        const priceStats = await Product.aggregate([
+            { $match: query },
+            {
+                $group: {
+                    _id: null,
+                    avgPrice: { $avg: '$price' },
+                    minPrice: { $min: '$price' },
+                    maxPrice: { $max: '$price' }
+                }
+            }
+        ]);
+
+        return res.status(200).json({
+            error: 0,
+            user: user,
+            data: {
+                general: {
+                    total: totalProducts,
+                    active: activeProducts,
+                    inactive: inactiveProducts,
+                    outOfStock: outOfStockProducts,
+                    prescription: prescriptionProducts,
+                    featured: featuredProducts
+                },
+                byCategory: productsByCategory,
+                byLaboratoire: productsByLaboratoire,
+                pricing: priceStats[0] || { avgPrice: 0, minPrice: 0, maxPrice: 0 }
+            }
+        });
+
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+};
+const productDelete = async (req, res) => {
+    try {
+        let { id } = req.body;
+
+        if (!id) {
+            return res.status(200).json({ 
+                error: 1, 
+                success: false, 
+                message: 'Le produit n\'a pu être identifié', 
+                errorMessage: 'Le produit n\'a pu être identifié' 
+            });
+        }
+
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error) { 
+            return res.status(404).json({ message: 'User not found' }); 
+        }
+
+        const user = the_admin.the_user;
+        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        const existingProduct = await Product.findOne({ _id: id, status: { $nin: ['deleted'] } });
+        if (!existingProduct) {
+            return res.status(200).json({ 
+                error: 1, 
+                success: false, 
+                message: 'Produit non trouvé', 
+                errorMessage: 'Produit non trouvé' 
+            });
+        }
+
+        existingProduct.status = 'deleted';
+
+        await existingProduct.save();
+        await registerActivity('Product', existingProduct._id, user._id, "Suppression Produit", `Le produit ${existingProduct.name} a été supprimé par ${user.name} `);
+        
+        return res.status(200).json({ 
+            error: 0, 
+            success: true, 
+            message: "Produit supprimé avec succès!", 
+            user: user 
+        });
+    } catch (error) {
+        console.error('Erreur lors de la suppression du produit:', error);
+        return res.status(500).json({ success: false, error: error.message });
+    }
+};
+// Fonction utilitaire pour mettre à jour le compteur de produits dans les catégories
+const updateCategoryProductCount = async (categoryIds) => {
+    try {
+        // S'assurer que categoryIds est un tableau
+        const categories = Array.isArray(categoryIds) ? categoryIds : [categoryIds];
+        
+        for (const categoryId of categories) {
+            // Compter les produits actifs dans cette catégorie
+            const productCount = await Product.countDocuments({
+                categories: categoryId,
+                status: { $nin: ['deleted'] }
+            });
+            
+            // Mettre à jour le compteur dans la catégorie
+            await Category.findByIdAndUpdate(
+                categoryId,
+                { 
+                    productCount: productCount,
+                    updatedAt: new Date()
+                },
+                { new: true }
+            );
+            
+            // Si cette catégorie a un parent, mettre à jour aussi le parent
+            const category = await Category.findById(categoryId);
+            if (category && category.parentCategory) {
+                // Calculer le total pour la catégorie parent (ses propres produits + ceux des sous-catégories)
+                const subcategories = await Category.find({ 
+                    parentCategory: category.parentCategory,
+                    status: { $nin: ['deleted'] }
+                });
+                
+                const subcategoryIds = subcategories.map(sub => sub._id);
+                subcategoryIds.push(category.parentCategory); // Inclure la catégorie parent elle-même
+                
+                const parentProductCount = await Product.countDocuments({
+                    categories: { $in: subcategoryIds },
+                    status: { $nin: ['deleted'] }
+                });
+                
+                await Category.findByIdAndUpdate(
+                    category.parentCategory,
+                    { 
+                        productCount: parentProductCount,
+                        updatedAt: new Date()
+                    },
+                    { new: true }
+                );
+            }
+        }
+    } catch (error) {
+        console.error('Erreur lors de la mise à jour du compteur de produits:', error);
+    }
+};
+
+// Modification de pharmacyProductsCreate
+const pharmacyProductsCreate = async (req, res) => {
+    try {
+        const { name, description, shortDescription, slug, categories, barcode, sku, cipCode, laboratoire, marque, price, originalPrice, cost, status, isVisible, isFeatured, isOnSale, requiresPrescription, prescriptionType, drugForm, dosage, packaging, activeIngredients, ageRestrictionMinAge, ageRestrictionMaxAge, contraindications, sideEffects, warnings, therapeuticClass, pharmacologicalClass, indicationsTherapeutiques, weight, metaTitle, metaDescription, keywords, instructions, storage, origin, pharmacies, isFragile, requiresColdChain} = req.body;
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+
+        if (the_admin.error ) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        user = the_admin.the_user;
+        user.photoURL =  user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        let query = {};
+
+        if (!name || !slug || !sku || !price || !categories || !pharmacies) {
+            return res.status(200).json({  error:1, success:false, errorMessage: 'Certains champs sont obligatoires! Remplissez les tous', message: 'Certains champs sont obligatoires! Remplissez les tous' });
+        }
+      
+        if (name) { query.name = name;}
+        if (description) { query.description = description;}
+        if (slug) { query.slug = slug; }
+        if (sku) { query.sku = sku; }
+        if (categories) { query.categories = {$in : categories}; }
+        if (status) { query.status = status;}
+        if (isVisible) { query.isVisible = isVisible; }
+        if (metaTitle) { query.metaTitle = metaTitle; }
+        if (metaDescription) { query.metaDescription = metaDescription; }
+        if (keywords) { query.keywords = {$in : keywords}; }
+        if (requiresPrescription) { query.requiresPrescription = requiresPrescription; }
+        if (pharmacies) { query['pharmacies.pharmacy'] = {$in: pharmacies}; }
+
+        query.status = { $nin : ['deleted'] };
+
+        let existingProduct = await Product.find(query);
+        if (existingProduct.length) {
+            return res.status(200).json({ error:1, success:false, errorMessage: 'Un produit avec ces caracteristiques existe deja' , message: 'Un produit avec ces caracteristiques existe deja' });
+        }
+
+        if (slug){
+            let slugExist = await Product.findOne({ slug: slug, status: { $nin : ['deleted'] } });
+            if (slugExist){
+                return res.status(200).json({ error:1, success:false, errorMessage: 'Un produit avec ces caracteristiques existe deja', message: 'Le slug existe deja pour un autre produit' });
+            }
+        }
+
+        if (sku){
+            let skuExist = await Product.findOne({ sku: sku, status: { $nin : ['deleted'] } });
+            if (skuExist){
+                return res.status(200).json({ error:1, success:false, errorMessage: 'Un produit avec ce SKU existe deja', message: 'Le SKU existe deja pour un autre produit' });
+            }
+        }
+
+        if (barcode){
+            let barcodeExist = await Product.findOne({ barcode: barcode, status: { $nin : ['deleted'] } });
+            if (barcodeExist){
+                return res.status(200).json({ error:1, success:false, errorMessage: 'Un produit avec ce code-barres existe deja', message: 'Le code-barres existe deja pour un autre produit' });
+            }
+        }
+
+        if (cipCode){
+            let cipExist = await Product.findOne({ cipCode: cipCode, status: { $nin : ['deleted'] } });
+            if (cipExist){
+                return res.status(200).json({ error:1, success:false, errorMessage: 'Un produit avec ce code CIP existe deja', message: 'Le code CIP existe deja pour un autre produit' });
+            }
+        }
+
+        const newProduct = new Product({
+            name,
+            description,
+            shortDescription,
+            slug,
+            categories,
+            barcode,
+            sku,
+            cipCode,
+            laboratoire,
+            marque,
+            price,
+            originalPrice,
+            cost,
+            status: status || 'active',
+            isVisible: isVisible !== undefined ? isVisible : true,
+            isFeatured: isFeatured || false,
+            isOnSale: isOnSale || false,
+            requiresPrescription: requiresPrescription || false,
+            prescriptionType: prescriptionType || 'none',
+            drugForm,
+            dosage,
+            packaging,
+            activeIngredients: activeIngredients || [],
+            ageRestriction: {
+                minAge: ageRestrictionMinAge || null,
+                maxAge: ageRestrictionMaxAge || null
+            },
+            contraindications: contraindications || [],
+            sideEffects: sideEffects || [],
+            warnings: warnings || [],
+            therapeuticClass,
+            pharmacologicalClass,
+            indicationsTherapeutiques: indicationsTherapeutiques || [],
+            weight,
+            metaTitle,
+            metaDescription,
+            keywords: keywords || [],
+            instructions,
+            storage,
+            origin,
+            pharmacies: pharmacies.map(pharmId => ({
+                pharmacy: pharmId,
+                isAvailable: true
+            })),
+            deliveryInfo: {
+                isFragile: isFragile || false,
+                requiresColdChain: requiresColdChain || false
+            }
+        });
+
+        await newProduct.save();
+        
+        // MISE À JOUR DU COMPTEUR DE PRODUITS DANS LES CATÉGORIES
+        await updateCategoryProductCount(categories);
+        
+        await newProduct
+            .populate([
+            { path: 'categories'},
+            { path: 'mainImage'},
+            { path: 'images'},
+            { path: 'pharmacies.pharmacy', populate : [
+                    { path: 'location'},
+                    { path: 'country'},
+                    { path: 'workingHours'},
+                    {path: 'deliveryZone', populate: [
+                        { path: 'coordinates', populate: [
+                            {path: 'points'},
+                        ]},
+                    ]},
+                    { path: 'documents', populate: [
+                        { path: 'logo'},
+                        { path: 'license'},
+                        { path: 'idDocument'},
+                        { path: 'insurance'},
+                    ]},
+                ],
+            },
+            { path: 'relatedProducts'},
+            { path: 'alternatives'}
+        ]);
+        await registerActivity('Product', newProduct._id, user._id,  "Produit Ajouté", "Le produit "+newProduct.name+" a ete ajoute!");
+
+        return res.status(200).json({ error:0, success:true, message: 'Le produit a ete cree avec succes', data: newProduct });
+
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+}
+
+// Modification de pharmacyProductsImport
+const pharmacyProductsImport = async (req, res) => {
+    try {
+        const { products } = req.body;
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+
+        if (the_admin.error) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        user = the_admin.the_user;
+        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        if (!products || !Array.isArray(products) || products.length === 0) {
+            return res.status(200).json({ 
+                error: 1, 
+                success: false, 
+                errorMessage: 'Aucun produit à importer', 
+                message: 'Aucun produit à importer' 
+            });
+        }
+
+        let importResults = {
+            total: products.length,
+            success: 0,
+            errors: 0,
+            errorDetails: []
+        };
+
+        let createdProducts = [];
+        let affectedCategories = new Set(); // Pour stocker les catégories affectées
+
+        // Traitement séquentiel pour éviter les conflits
+        for (let i = 0; i < products.length; i++) {
+            const productData = products[i];
+            
+            try {
+                // Validation des champs obligatoires
+                if (!productData.name || !productData.sku || !productData.price) {
+                    importResults.errors++;
+                    importResults.errorDetails.push({
+                        row: i + 1,
+                        name: productData.name || 'Non défini',
+                        error: 'Champs obligatoires manquants (name, sku, price)'
+                    });
+                    continue;
+                }
+
+                // Vérification de l'existence basée sur le nom et le SKU
+                let existingByName = await Product.findOne({ 
+                    name: productData.name, 
+                    status: { $nin: ['deleted'] } 
+                });
+
+                let existingBySku = await Product.findOne({ 
+                    sku: productData.sku, 
+                    status: { $nin: ['deleted'] } 
+                });
+
+                if (existingByName) {
+                    importResults.errors++;
+                    importResults.errorDetails.push({
+                        row: i + 1,
+                        name: productData.name,
+                        error: 'Un produit avec ce nom existe déjà'
+                    });
+                    continue;
+                }
+
+                if (existingBySku) {
+                    importResults.errors++;
+                    importResults.errorDetails.push({
+                        row: i + 1,
+                        name: productData.name,
+                        error: 'Un produit avec ce SKU existe déjà'
+                    });
+                    continue;
+                }
+
+                // Création du nouveau produit
+                const newProduct = new Product({
+                    name: productData.name,
+                    description: productData.description || '',
+                    shortDescription: productData.shortDescription || '',
+                    slug: productData.slug || productData.name
+                        .toLowerCase()
+                        .replace(/[^a-z0-9\s-]/g, '')
+                        .replace(/\s+/g, '-')
+                        .replace(/-+/g, '-')
+                        .trim(),
+                    categories: productData.categories || [],
+                    sku: productData.sku,
+                    barcode: productData.barcode || null,
+                    cipCode: productData.cipCode || null,
+                    laboratoire: productData.laboratoire || '',
+                    marque: productData.marque || '',
+                    price: productData.price,
+                    originalPrice: productData.originalPrice || null,
+                    cost: productData.cost || null,
+                    status: productData.status || 'active',
+                    isVisible: productData.isVisible !== undefined ? productData.isVisible : true,
+                    isFeatured: productData.isFeatured || false,
+                    isOnSale: productData.isOnSale || false,
+                    requiresPrescription: productData.requiresPrescription || false,
+                    prescriptionType: productData.requiresPrescription ? 'simple' : 'none',
+                    drugForm: productData.drugForm || '',
+                    dosage: productData.dosage || '',
+                    packaging: productData.packaging || '',
+                    activeIngredients: productData.activeIngredients || [],
+                    ageRestriction: {
+                        minAge: productData.ageRestrictionMinAge || null,
+                        maxAge: productData.ageRestrictionMaxAge || null
+                    },
+                    contraindications: productData.contraindications || [],
+                    sideEffects: productData.sideEffects || [],
+                    warnings: productData.warnings || [],
+                    therapeuticClass: productData.therapeuticClass || '',
+                    pharmacologicalClass: productData.pharmacologicalClass || '',
+                    indicationsTherapeutiques: productData.indicationsTherapeutiques || [],
+                    weight: productData.weight || null,
+                    metaTitle: productData.metaTitle || '',
+                    metaDescription: productData.metaDescription || '',
+                    keywords: productData.keywords || [],
+                    instructions: productData.instructions || '',
+                    storage: productData.storage || '',
+                    origin: productData.origin || '',
+                    pharmacies: productData.pharmacies ? productData.pharmacies.map(pharmId => ({
+                        pharmacy: pharmId,
+                        isAvailable: true
+                    })) : [],
+                    deliveryInfo: {
+                        isFragile: productData.isFragile || false,
+                        requiresColdChain: productData.requiresColdChain || false
+                    }
+                });
+
+                // Sauvegarde
+                await newProduct.save();
+                
+                // Ajouter les catégories à la liste des catégories affectées
+                if (productData.categories && productData.categories.length > 0) {
+                    productData.categories.forEach(catId => affectedCategories.add(catId));
+                }
+                
+                // Population des données
+                await newProduct.populate([
+                    { path: 'categories' },
+                    { path: 'mainImage' },
+                    { path: 'images' },
+                    { 
+                        path: 'pharmacies.pharmacy', 
+                        populate: [
+                            { path: 'location' },
+                            { path: 'country' },
+                            { path: 'workingHours' },
+                            {
+                                path: 'deliveryZone', 
+                                populate: [
+                                    { 
+                                        path: 'coordinates', 
+                                        populate: [
+                                            { path: 'points' }
+                                        ]
+                                    }
+                                ]
+                            },
+                            { 
+                                path: 'documents', 
+                                populate: [
+                                    { path: 'logo' },
+                                    { path: 'license' },
+                                    { path: 'idDocument' },
+                                    { path: 'insurance' }
+                                ]
+                            }
+                        ]
+                    }
+                ]);
+
+                // Enregistrement de l'activité
+                await registerActivity(
+                    'Product', 
+                    newProduct._id, 
+                    user._id, 
+                    "Produit Importé", 
+                    `Le produit ${newProduct.name} a été importé avec succès!`
+                );
+
+                createdProducts.push(newProduct);
+                importResults.success++;
+
+            } catch (productError) {
+                importResults.errors++;
+                importResults.errorDetails.push({
+                    row: i + 1,
+                    name: productData.name || 'Non défini',
+                    error: productError.message || 'Erreur inconnue lors de la création'
+                });
+            }
+        }
+
+        // MISE À JOUR DES COMPTEURS POUR TOUTES LES CATÉGORIES AFFECTÉES
+        if (affectedCategories.size > 0) {
+            await updateCategoryProductCount(Array.from(affectedCategories));
+        }
+
+        // Réponse finale
+        const message = `Importation terminée: ${importResults.success} succès, ${importResults.errors} erreurs sur ${importResults.total} produits`;
+        
+        return res.status(200).json({ 
+            error: importResults.errors > 0 ? 1 : 0,
+            success: importResults.success > 0,
+            message: message,
+            data: {
+                results: importResults,
+                createdProducts: createdProducts
+            }
+        });
+
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+};
+const pharmacyProductDetail = async(req, res)=> {
+    try {
+        const { id } = req.body;
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+
+        if (!id) {
+            return res.status(200).json({ error: 1, success: false, message: 'Id du produit invalide !', messageError: 'Id du produit invalide !' });
+        }
+
+        if (the_admin.error ) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        user = the_admin.the_user;
+        user.photoURL =  user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        let query = {};
+      
+        const prodPharmaciesList = user?.groups?.some(g => ['manager_pharmacy', 'pharmacien','preparateur', 'caissier', 'consultant'].includes(g.code)) ? user.pharmaciesManaged.map(pharm => pharm._id) : [];
+        const pharmaciesList = user?.groups?.some(g => ['manager_pharmacy', 'pharmacien','preparateur', 'caissier', 'consultant'].includes(g.code)) ? user.pharmaciesManaged.map(pharm => ({ value: pharm._id, label: pharm.name })) : [];
+
+        if (user?.groups?.some(g => ['manager_pharmacy', 'pharmacien','preparateur', 'caissier', 'consultant'].includes(g.code))) {
+            query['pharmacies.pharmacy'] = { $in: prodPharmaciesList };
+        }else{
+            return res.status(200).json({'error':0, putin:'he merde je suis ici', user: user, data: [], query: query });
+        }
+
+        query.status = { $nin : ['deleted'] };
+        let products = await Product.find(query).lean();
+
+        let prodPerId = {};
+        products.map((product) => {
+            prodPerId[product._id] = product;
+        });
+
+        const product = await Product.findOne({ _id : id, status: { $nin : ['deleted'] }}).
+               populate([
+                    { path: 'categories'},
+                    { path: 'mainImage'},
+                    { path: 'images'},
+                    { path: 'pharmacies.pharmacy', populate : [
+                            { path: 'location'},
+                            { path: 'country'},
+                            { path: 'workingHours'},
+                            {path: 'deliveryZone', populate: [
+                                { path: 'coordinates', populate: [
+                                    {path: 'points'},
+                                ]},
+                            ]},
+                            { path: 'documents', populate: [
+                                { path: 'logo'},
+                                { path: 'license'},
+                                { path: 'idDocument'},
+                                { path: 'insurance'},
+                            ]},
+                        ],
+                    },
+                    { path: 'relatedProducts'},
+                    { path: 'alternatives'}
+                ]);
+
+        return res.status(200).json({'error':0, user: user, data: product, prodPerId:prodPerId, pharmaciesList});
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+};
+const productUpdate = async (req, res) => {
+    try {
+        let { 
+            _id, type_, name, description, shortDescription, slug, categories, barcode, sku, cipCode,
+            laboratoire, marque, price, originalPrice, cost, status, isVisible, isFeatured,
+            isOnSale, requiresPrescription, prescriptionType, drugForm, dosage, packaging,
+            activeIngredients, ageRestrictionMinAge, ageRestrictionMaxAge, contraindications, 
+            sideEffects, warnings, therapeuticClass, pharmacologicalClass, indicationsTherapeutiques, 
+            weight, metaTitle, metaDescription, keywords, instructions, storage, origin, pharmacies,
+            isFragile, requiresColdChain
+        } = req.body;
+
+        if (!type_ || !_id) {
+            return res.status(200).json({ error: 1, success: false, message: 'Tous les champs obligatoires doivent être renseignés', errorMessage: 'Tous les champs obligatoires doivent être renseignés' });
+        }
+
+        let fieldsToCheck = [];
+
+        switch (type_) {
+            case 1:
+                fieldsToCheck = [
+                    'name', 'description', 'shortDescription', 'slug', 'categories', 'status',
+                    'isVisible', 'isFeatured', 'isOnSale', 'metaTitle', 'metaDescription', 'keywords'
+                ];
+                if (!name || !slug) { return res.status(200).json({ error: 1, success: false, message: 'Tous les champs obligatoires doivent être renseignés', errorMessage: 'Tous les champs obligatoires doivent être renseignés' });}
+                break;
+
+            case 2:
+                fieldsToCheck = ['barcode', 'sku', 'cipCode', 'laboratoire', 'marque'];
+                if (!sku) { return res.status(200).json({ error: 1, success: false, message: 'Tous les champs obligatoires doivent être renseignés', errorMessage: 'Tous les champs obligatoires doivent être renseignés' }); }
+                break;
+
+            case 3:
+                fieldsToCheck = ['price', 'originalPrice', 'cost'];
+                if (!price) { return res.status(200).json({ error: 1, success: false, message: 'Tous les champs obligatoires doivent être renseignés', errorMessage: 'Tous les champs obligatoires doivent être renseignés' }); }
+                break;
+
+            case 4:
+                fieldsToCheck = [
+                    'requiresPrescription', 'prescriptionType', 'drugForm', 'dosage', 'packaging',
+                    'activeIngredients', 'therapeuticClass', 'pharmacologicalClass', 'indicationsTherapeutiques'
+                ];
+                break;
+
+            case 5:
+                fieldsToCheck = ['contraindications', 'sideEffects', 'warnings'];
+                break;
+
+            case 6:
+                fieldsToCheck = ['weight', 'instructions', 'storage', 'origin'];
+                break;
+
+            case 7:
+                fieldsToCheck = ['pharmacies'];
+                if (!pharmacies) { return res.status(200).json({ error: 1, success: false, message: 'Tous les champs obligatoires doivent être renseignés', errorMessage: 'Tous les champs obligatoires doivent être renseignés' }); }
+                break;
+            default: break;
+        }
+
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error) { 
+            return res.status(404).json({ message: 'User not found' }); 
+        }
+
+        const user = the_admin.the_user;
+        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        const existingProduct = await Product.findOne({_id : _id, status: { $nin : ['deleted'] }});
+        if (!existingProduct) {
+            return res.status(200).json({ error: 1, success: false, message: 'Produit non trouvé', errorMessage: 'Produit non trouvé' });
+        }
+
+        // Check for duplicate product (excluding current)
+        if (slug) {
+            let slugExist = await Product.findOne({ _id: { $ne: _id }, slug: slug, status: { $nin : ['deleted'] } });
+            if (slugExist) {
+                return res.status(200).json({ error: 1, success: false, errorMessage: 'Le slug existe deja pour un autre produit', message: 'Le slug existe deja pour un autre produit' });
+            }
+        }
+
+        if (sku) {
+            let skuExist = await Product.findOne({ _id: { $ne: _id }, sku: sku, status: { $nin : ['deleted'] } });
+            if (skuExist) {
+                return res.status(200).json({ error: 1, success: false, errorMessage: 'Le SKU existe deja pour un autre produit', message: 'Le SKU existe deja pour un autre produit' });
+            }
+        }
+
+        if (barcode) {
+            let barcodeExist = await Product.findOne({ _id: { $ne: _id }, barcode: barcode, status: { $nin : ['deleted'] } });
+            if (barcodeExist) {
+                return res.status(200).json({ error: 1, success: false, errorMessage: 'Le code-barres existe deja pour un autre produit', message: 'Le code-barres existe deja pour un autre produit' });
+            }
+        }
+
+        if (cipCode) {
+            let cipExist = await Product.findOne({ _id: { $ne: _id }, cipCode: cipCode, status: { $nin : ['deleted'] } });
+            if (cipExist) {
+                return res.status(200).json({ error: 1, success: false, errorMessage: 'Le code CIP existe deja pour un autre produit', message: 'Le code CIP existe deja pour un autre produit' });
+            }
+        }
+
+        let updates = [];
+        fieldsToCheck.forEach(field => {
+            if (typeof req.body[field] !== 'undefined') {
+                if (Array.isArray(existingProduct[field]) || Array.isArray(req.body[field])) {
+                    if (JSON.stringify(existingProduct[field] || []) !== JSON.stringify(req.body[field] || [])) {
+                        updates.push(field);
+                        existingProduct[field] = req.body[field];
+                    }
+                } else if (existingProduct[field] != req.body[field]) {
+                    updates.push(field);
+                    existingProduct[field] = field === 'keywords' ? (Array.isArray(req.body.keywords) ? req.body.keywords : typeof req.body.keywords === 'string' ? req.body.keywords.split(',').map(k => k.trim()).filter(Boolean) : []) : req.body[field];
+                }
+            }
+        });
+
+        // Gestion spéciale pour ageRestriction
+        if (type_ === 4 && (typeof ageRestrictionMinAge !== 'undefined' || typeof ageRestrictionMaxAge !== 'undefined')) {
+            const newAgeRestriction = {
+                minAge: ageRestrictionMinAge || existingProduct.ageRestriction?.minAge || null,
+                maxAge: ageRestrictionMaxAge || existingProduct.ageRestriction?.maxAge || null
+            };
+            if (JSON.stringify(existingProduct.ageRestriction || {}) !== JSON.stringify(newAgeRestriction)) {
+                updates.push('ageRestriction');
+                existingProduct.ageRestriction = newAgeRestriction;
+            }
+        }
+
+        // Gestion spéciale pour deliveryInfo
+        if (type_ === 6 && (typeof isFragile !== 'undefined' || typeof requiresColdChain !== 'undefined')) {
+            const newDeliveryInfo = {
+                isFragile: isFragile !== undefined ? isFragile : existingProduct.deliveryInfo?.isFragile || false,
+                requiresColdChain: requiresColdChain !== undefined ? requiresColdChain : existingProduct.deliveryInfo?.requiresColdChain || false
+            };
+            if (JSON.stringify(existingProduct.deliveryInfo || {}) !== JSON.stringify(newDeliveryInfo)) {
+                updates.push('deliveryInfo');
+                existingProduct.deliveryInfo = newDeliveryInfo;
+            }
+        }
+
+        // Gestion spéciale pour pharmacies
+        if (type_ === 7 && pharmacies) {
+            const newPharmacies = pharmacies.map(pharmId => ({
+                pharmacy: pharmId,
+                isAvailable: true
+            }));
+            if (JSON.stringify(existingProduct.pharmacies || []) !== JSON.stringify(newPharmacies)) {
+                updates.push('pharmacies');
+                existingProduct.pharmacies = newPharmacies;
+            }
+        }
+
+        await existingProduct.save();
+        await existingProduct.
+            populate([
+                { path: 'categories'},
+                { path: 'mainImage'},
+                { path: 'images'},
+                { path: 'pharmacies.pharmacy', populate : [
+                        { path: 'location'},
+                        { path: 'country'},
+                        { path: 'workingHours'},
+                        {path: 'deliveryZone', populate: [
+                            { path: 'coordinates', populate: [
+                                {path: 'points'},
+                            ]},
+                        ]},
+                        { path: 'documents', populate: [
+                            { path: 'logo'},
+                            { path: 'license'},
+                            { path: 'idDocument'},
+                            { path: 'insurance'},
+                        ]},
+                    ],
+                },
+                { path: 'relatedProducts'},
+                { path: 'alternatives'}
+            ]);
+
+        if (updates){
+            await registerActivity('Product', existingProduct._id, user._id, "Mise a jour Produit", `Certaines informations du produit ${existingProduct.name} ont été mises à jour : ${updates.join(' | ')} `);
+        }
+
+        return res.status(200).json({ error: 0, success: true, message: "Produit mis a jour avec succès!", user: user, data: existingProduct });
+
+    } catch (error) {
+        console.error('Erreur lors de la mise à jour du produit:', error);
+        return res.status(500).json({ success: false, error: error.message });
+    }
+};
 const loadAllActivitiesAndSendMailAdmins = async (updatedPharmacy, updates, user, extra = '') => {
     let messageToSendToAdmin = `
     <div style="font-family: Arial, sans-serif; color: #222;">
@@ -1828,4 +3343,4 @@ const loadHistoricMiniChat = async (req, res) => {
     }
 }
 
-module.exports = { authentificateUser, setProfilInfo, loadGeneralsInfo, loadAllActivities, setSettingsFont, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload, pharmacieUpdate, pharmacieDocumentsUpload, pharmacieWorkingsHours, pharmacieActivities, loadHistoricMiniChat, pharmacyCategoriesList, pharmacieCategorieImagesUpload, pharmacyCategoriesCreate, pharmacyCategoryDetail, categoriesActivities, categorieUpdate };
+module.exports = { authentificateUser, setProfilInfo, loadGeneralsInfo, loadAllActivities, setSettingsFont, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload, pharmacieUpdate, pharmacieDocumentsUpload, pharmacieWorkingsHours, pharmacieActivities, loadHistoricMiniChat, pharmacyCategoriesList, pharmacieCategorieImagesUpload, pharmacyCategoriesCreate, pharmacyCategoryDetail, categoriesActivities, categorieUpdate, categorieDelete, pharmacyCategoriesImport, pharmacyProductsList, pharmacyProductsCreate, productsActivities, uploadProductImages, productsAdvancedSearch, productsStats, productDelete, pharmacyProductsImport, pharmacyProductDetail, productUpdate };
