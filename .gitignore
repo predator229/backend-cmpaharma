@@ -1,5 +1,5 @@
 .qodo
 .env
 .env
-/uploads
+uploads/
 config/
