@@ -27,12 +27,11 @@ const path = require('path');
 const Group = require('@models/Group');
 const MiniChatMessage = require('@models/MiniChatMessage');
 
-const { model } = require('mongoose');
+const mongoose = require('mongoose');
+
 const fs = require('fs');
-const { error, group } = require('console');
 
 const nodemailer = require('nodemailer');
-const { type } = require('os');
 
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com', 
@@ -879,7 +878,6 @@ const pharmacieCategorieImagesUpload = async (req, res) => {
         return res.status(500).json({ error: error.message });
     }
 };
-
 const pharmacieDocumentsUpload = async (req, res) => {
     try {
         const { type_, pharmacyId, uid } = req.body;
@@ -1390,8 +1388,6 @@ const pharmacieActivities = async (req, res) => {
             ? await Activity.find({ id_object: pharmacies.map(pharm => pharm._id) }).sort({ created_at: -1 }).limit(parseInt(prePage) || 10)
             : await Activity.find().sort({ created_at: -1 }).limit(parseInt(prePage) || 10);
 
-        const mongoose = require('mongoose');
-        const path = require('path');
         const validAuthorIds = activities
             ? activities.map(act => act.author).filter(id => mongoose.Types.ObjectId.isValid(id))
             : [];
@@ -1411,6 +1407,70 @@ const pharmacieActivities = async (req, res) => {
         return res.status(500).json({ error: error.message });
     }
 };
+const AllPharmacieActivities = async (req, res) => {
+    try {
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error ) { return res.status(404).json({ message: 'User not found' }); }
+
+        var user = the_admin.the_user;
+        user.photoURL =  user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        const userInGroupAdmin = Array.isArray(user.groups) && user.groups.length > 0
+            ? user.groups.some(g => ['superadmin', 'manager_admin', 'admin_technique'].includes(g.code))
+            : false;
+
+        let { prePage } = req.body;
+        const idPharmacies = user.pharmaciesManaged?.map( pharm => pharm._id );
+
+        let pharmacies = idPharmacies ? await Pharmacy.find( {_id : Array.isArray(id) ? {$in : id} : id }) : false;
+        if (!pharmacies && !userInGroupAdmin) { 
+            return res.status(404).json({ success: false, message: 'Vous n\'avez pas le droit d\'acceder a ces informations!' });
+        }
+
+        let activities = {};
+        if (pharmacies) {
+
+            //sections to check
+            const sections = ['products','catgeories','pharmacies'];
+            let ids = [];
+            const idsPharmAuthorized = pharmacies.map(pharm => pharm._id);
+            sections.forEach( async elmt => {
+                let results = [];
+                switch (elmt) {
+                    case 'products': results = await Product.find({}); break;
+                    case 'catgeories': results = await Category.find({}); break;
+                    case 'pharmacies': results = await Category.find({}); break;
+                    default:break;
+                }
+                ids = ids.concat(results.map(p => p._id));
+            } )
+
+
+            activities = await Activity.find({ id_object: pharmacies.map(pharm => pharm._id) }).sort({ created_at: -1 }).limit(parseInt(prePage) || 10)
+        }else{
+            activities = await Activity.find().sort({ created_at: -1 }).limit(parseInt(prePage) || 10);
+        }
+       
+        const validAuthorIds = activities
+            ? activities.map(act => act.author).filter(id => mongoose.Types.ObjectId.isValid(id))
+            : [];
+        const users = validAuthorIds.length > 0 ? await Admin.find({ _id: { $in: validAuthorIds } }).lean() : [];
+        const usersMap = {};
+        users.forEach(each => {
+            each.photoURL = each.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(each.name || 'User')}&background=random&size=500`;
+            if (each._id && mongoose.Types.ObjectId.isValid(each._id)) {
+                usersMap[each._id] = {
+                    'name' : each._id.toString() == user._id.toString() ? 'Vous' : each.name+' '+each.surname,
+                    'img' : each.photoURL
+                };
+            }
+        });
+        return res.status(200).json({'error':0, usersMap: usersMap, data: activities, user: user });
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+};
+
 const pharmacyCategoriesList = async(req, res)=> {
     try {
         const { status, level, pharmaciesId, search } = req.body;
@@ -1876,9 +1936,7 @@ const categoriesActivities = async (req, res) => {
             ? await Activity.find({ id_object: categories.map(cat => cat._id) }).sort({ created_at: -1 }).limit(parseInt(prePage) || 10)
             : await Activity.find().sort({ created_at: -1 }).limit(parseInt(prePage) || 10);
 
-        const mongoose = require('mongoose');
-        const path = require('path');
-        const validAuthorIds = activities
+            const validAuthorIds = activities
             ? activities.map(act => act.author).filter(id => mongoose.Types.ObjectId.isValid(id))
             : [];
         const users = validAuthorIds.length > 0 ? await Admin.find({ _id: { $in: validAuthorIds } }).lean() : [];
@@ -2107,7 +2165,29 @@ const pharmacyProductsList = async (req, res) => {
 
         let products = await Product.find(query)
             .populate([
-                { path: 'categories' },
+                { path: 'categories', populate:[
+                    { path: 'imageUrl'},
+                    { path: 'iconUrl'},
+                    { path: 'parentCategory'},
+                    { path: 'pharmaciesList', populate : [
+                            { path: 'location'},
+                            { path: 'country'},
+                            { path: 'workingHours'},
+                            {path: 'deliveryZone', populate: [
+                                { path: 'coordinates', populate: [
+                                    {path: 'points'},
+                                ]},
+                            ]},
+                            { path: 'documents', populate: [
+                                { path: 'logo'},
+                                { path: 'license'},
+                                { path: 'idDocument'},
+                                { path: 'insurance'},
+                            ]},
+                        ],
+                    },
+                    { path: 'subcategories'}
+                ]},
                 { path: 'mainImage' },
                 { path: 'images' },
                 {
@@ -2188,8 +2268,6 @@ const productsActivities = async (req, res) => {
             ? await Activity.find({ id_object: products.map(prod => prod._id) }).sort({ created_at: -1 }).limit(parseInt(prePage) || 10)
             : await Activity.find().sort({ created_at: -1 }).limit(parseInt(prePage) || 10);
 
-        const mongoose = require('mongoose');
-        const path = require('path');
         const validAuthorIds = activities
             ? activities.map(act => act.author).filter(id => mongoose.Types.ObjectId.isValid(id))
             : [];
@@ -2305,7 +2383,29 @@ const productsAdvancedSearch = async (req, res) => {
 
         const products = await Product.find(query)
             .populate([
-                { path: 'categories' },
+                { path: 'categories', populate:[
+                    { path: 'imageUrl'},
+                    { path: 'iconUrl'},
+                    { path: 'parentCategory'},
+                    { path: 'pharmaciesList', populate : [
+                            { path: 'location'},
+                            { path: 'country'},
+                            { path: 'workingHours'},
+                            {path: 'deliveryZone', populate: [
+                                { path: 'coordinates', populate: [
+                                    {path: 'points'},
+                                ]},
+                            ]},
+                            { path: 'documents', populate: [
+                                { path: 'logo'},
+                                { path: 'license'},
+                                { path: 'idDocument'},
+                                { path: 'insurance'},
+                            ]},
+                        ],
+                    },
+                    { path: 'subcategories'}
+                ]},
                 { path: 'mainImage' },
                 { path: 'images' },
                 {
@@ -2725,7 +2825,29 @@ const pharmacyProductsImport = async (req, res) => {
                 
                 // Population des données
                 await newProduct.populate([
-                    { path: 'categories' },
+                    { path: 'categories', populate:[
+                        { path: 'imageUrl'},
+                        { path: 'iconUrl'},
+                        { path: 'parentCategory'},
+                        { path: 'pharmaciesList', populate : [
+                                { path: 'location'},
+                                { path: 'country'},
+                                { path: 'workingHours'},
+                                {path: 'deliveryZone', populate: [
+                                    { path: 'coordinates', populate: [
+                                        {path: 'points'},
+                                    ]},
+                                ]},
+                                { path: 'documents', populate: [
+                                    { path: 'logo'},
+                                    { path: 'license'},
+                                    { path: 'idDocument'},
+                                    { path: 'insurance'},
+                                ]},
+                            ],
+                        },
+                        { path: 'subcategories'}
+                    ]},
                     { path: 'mainImage' },
                     { path: 'images' },
                     { 
@@ -2891,7 +3013,29 @@ const pharmacyProductDetail = async(req, res)=> {
 
         const product = await Product.findOne({ _id : id, status: { $nin : ['deleted'] }}).
                populate([
-                    { path: 'categories'},
+                    { path: 'categories', populate:[
+                        { path: 'imageUrl'},
+                        { path: 'iconUrl'},
+                        { path: 'parentCategory'},
+                        { path: 'pharmaciesList', populate : [
+                                { path: 'location'},
+                                { path: 'country'},
+                                { path: 'workingHours'},
+                                {path: 'deliveryZone', populate: [
+                                    { path: 'coordinates', populate: [
+                                        {path: 'points'},
+                                    ]},
+                                ]},
+                                { path: 'documents', populate: [
+                                    { path: 'logo'},
+                                    { path: 'license'},
+                                    { path: 'idDocument'},
+                                    { path: 'insurance'},
+                                ]},
+                            ],
+                        },
+                        { path: 'subcategories'}
+                    ]},
                     { path: 'mainImage'},
                     { path: 'images'},
                     { path: 'pharmacies.pharmacy', populate : [
@@ -2936,7 +3080,20 @@ const productUpdate = async (req, res) => {
             return res.status(200).json({ error: 1, success: false, message: 'Tous les champs obligatoires doivent être renseignés', errorMessage: 'Tous les champs obligatoires doivent être renseignés' });
         }
 
-        let fieldsToCheck = [];
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error) { 
+            return res.status(404).json({ message: 'User not found' }); 
+        }
+
+        const user = the_admin.the_user;
+        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        const existingProduct = await Product.findOne({_id : _id, status: { $nin : ['deleted'] }});
+        if (!existingProduct) {
+            return res.status(200).json({ error: 1, success: false, message: 'Produit non trouvé', errorMessage: 'Produit non trouvé' });
+        }
+
+         let fieldsToCheck = [];
 
         switch (type_) {
             case 1:
@@ -2977,19 +3134,6 @@ const productUpdate = async (req, res) => {
                 if (!pharmacies) { return res.status(200).json({ error: 1, success: false, message: 'Tous les champs obligatoires doivent être renseignés', errorMessage: 'Tous les champs obligatoires doivent être renseignés' }); }
                 break;
             default: break;
-        }
-
-        var the_admin = await getTheCurrentUserOrFailed(req, res);
-        if (the_admin.error) { 
-            return res.status(404).json({ message: 'User not found' }); 
-        }
-
-        const user = the_admin.the_user;
-        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
-
-        const existingProduct = await Product.findOne({_id : _id, status: { $nin : ['deleted'] }});
-        if (!existingProduct) {
-            return res.status(200).json({ error: 1, success: false, message: 'Produit non trouvé', errorMessage: 'Produit non trouvé' });
         }
 
         // Check for duplicate product (excluding current)
@@ -3075,7 +3219,29 @@ const productUpdate = async (req, res) => {
         await existingProduct.save();
         await existingProduct.
             populate([
-                { path: 'categories'},
+                { path: 'categories', populate:[
+                    { path: 'imageUrl'},
+                    { path: 'iconUrl'},
+                    { path: 'parentCategory'},
+                    { path: 'pharmaciesList', populate : [
+                            { path: 'location'},
+                            { path: 'country'},
+                            { path: 'workingHours'},
+                            {path: 'deliveryZone', populate: [
+                                { path: 'coordinates', populate: [
+                                    {path: 'points'},
+                                ]},
+                            ]},
+                            { path: 'documents', populate: [
+                                { path: 'logo'},
+                                { path: 'license'},
+                                { path: 'idDocument'},
+                                { path: 'insurance'},
+                            ]},
+                        ],
+                    },
+                    { path: 'subcategories'}
+                ]},
                 { path: 'mainImage'},
                 { path: 'images'},
                 { path: 'pharmacies.pharmacy', populate : [
@@ -3100,6 +3266,9 @@ const productUpdate = async (req, res) => {
             ]);
 
         if (updates){
+            if (updates.includes('categories')) {
+                updateCategoryProductCount(categories);
+            }
             await registerActivity('Product', existingProduct._id, user._id, "Mise a jour Produit", `Certaines informations du produit ${existingProduct.name} ont été mises à jour : ${updates.join(' | ')} `);
         }
 
