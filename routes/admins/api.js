@@ -91,6 +91,7 @@ router.post('/managers/pharmacies/activities', deliververifyFirebaseToken, pharm
 
 //tools
 router.post('/tools/get-countries-list' , getListCountries);
+    router.post('/tools/activities', deliververifyFirebaseToken, pharmacieActivities);
 
 //mini-chat
 router.post('/chat/pharmacy/messages', deliververifyFirebaseToken, loadHistoricMiniChat);
