@@ -2152,7 +2152,6 @@ const pharmacyProductsList = async (req, res) => {
         return res.status(500).json({ error: error.message });
     }
 };
-// Création d'un produit
 const productsActivities = async (req, res) => {
     try {
         var the_admin = await getTheCurrentUserOrFailed(req, res);
@@ -2206,80 +2205,6 @@ const productsActivities = async (req, res) => {
             }
         });
         return res.status(200).json({ 'error': 0, usersMap: usersMap, data: activities, user: user });
-    } catch (error) {
-        return res.status(500).json({ error: error.message });
-    }
-};
-const uploadProductImages = async (req, res) => {
-    try {
-        const { productId, type_ } = req.body;
-        var the_admin = await getTheCurrentUserOrFailed(req, res);
-
-        req.body.type = "admin"
-
-        if (the_admin.error) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-
-        const user = the_admin.the_user;
-
-        if (!productId || !type_) {
-            return res.status(200).json({error: 1,success: false,message: 'Paramètres manquants',errorMessage: 'Paramètres manquants'});
-        }
-
-        const product = await Product.findOne({ _id: productId, status: { $nin: ['deleted'] } });
-        if (!product) {
-            return res.status(200).json({ error: 1, success: false, message: 'Produit non trouvé', errorMessage: 'Produit non trouvé'
-            });
-        }
-
-        // Ici vous devriez traiter l'upload du fichier selon votre système de fichiers
-        // Exemple avec multer ou autre système d'upload
-        if (!req.file) {
-            return res.status(200).json({
-                error: 1,
-                success: false,
-                message: 'Aucun fichier uploadé',
-                errorMessage: 'Aucun fichier uploadé'
-            });
-        }
-
-        // Créer l'objet File selon votre modèle
-        const newFile = new File({
-            originalName: req.file.originalname,
-            filename: req.file.filename,
-            path: req.file.path,
-            size: req.file.size,
-            mimetype: req.file.mimetype,
-            uploadedBy: user._id
-        });
-
-        await newFile.save();
-
-        // Mettre à jour le produit selon le type d'image
-        if (type_ === 'mainImage') {
-            product.mainImage = newFile._id;
-        } else if (type_.startsWith('images_')) {
-            if (!product.images) {
-                product.images = [];
-            }
-            product.images.push(newFile._id);
-        }
-
-        await product.save();
-
-        await registerActivity('Product', product._id, user._id, "Image Ajoutée", `Une image a été ajoutée au produit ${product.name}`);
-
-        return res.status(200).json({
-            error: 0,
-            success: true,
-            message: 'Image uploadée avec succès',
-            data: {
-                fileId: newFile._id,
-                file: newFile
-            }
-        });
-
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }
@@ -2502,109 +2427,6 @@ const productsStats = async (req, res) => {
         return res.status(500).json({ error: error.message });
     }
 };
-const productDelete = async (req, res) => {
-    try {
-        let { id } = req.body;
-
-        if (!id) {
-            return res.status(200).json({ 
-                error: 1, 
-                success: false, 
-                message: 'Le produit n\'a pu être identifié', 
-                errorMessage: 'Le produit n\'a pu être identifié' 
-            });
-        }
-
-        var the_admin = await getTheCurrentUserOrFailed(req, res);
-        if (the_admin.error) { 
-            return res.status(404).json({ message: 'User not found' }); 
-        }
-
-        const user = the_admin.the_user;
-        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
-
-        const existingProduct = await Product.findOne({ _id: id, status: { $nin: ['deleted'] } });
-        if (!existingProduct) {
-            return res.status(200).json({ 
-                error: 1, 
-                success: false, 
-                message: 'Produit non trouvé', 
-                errorMessage: 'Produit non trouvé' 
-            });
-        }
-
-        existingProduct.status = 'deleted';
-
-        await existingProduct.save();
-        await registerActivity('Product', existingProduct._id, user._id, "Suppression Produit", `Le produit ${existingProduct.name} a été supprimé par ${user.name} `);
-        
-        return res.status(200).json({ 
-            error: 0, 
-            success: true, 
-            message: "Produit supprimé avec succès!", 
-            user: user 
-        });
-    } catch (error) {
-        console.error('Erreur lors de la suppression du produit:', error);
-        return res.status(500).json({ success: false, error: error.message });
-    }
-};
-// Fonction utilitaire pour mettre à jour le compteur de produits dans les catégories
-const updateCategoryProductCount = async (categoryIds) => {
-    try {
-        // S'assurer que categoryIds est un tableau
-        const categories = Array.isArray(categoryIds) ? categoryIds : [categoryIds];
-        
-        for (const categoryId of categories) {
-            // Compter les produits actifs dans cette catégorie
-            const productCount = await Product.countDocuments({
-                categories: categoryId,
-                status: { $nin: ['deleted'] }
-            });
-            
-            // Mettre à jour le compteur dans la catégorie
-            await Category.findByIdAndUpdate(
-                categoryId,
-                { 
-                    productCount: productCount,
-                    updatedAt: new Date()
-                },
-                { new: true }
-            );
-            
-            // Si cette catégorie a un parent, mettre à jour aussi le parent
-            const category = await Category.findById(categoryId);
-            if (category && category.parentCategory) {
-                // Calculer le total pour la catégorie parent (ses propres produits + ceux des sous-catégories)
-                const subcategories = await Category.find({ 
-                    parentCategory: category.parentCategory,
-                    status: { $nin: ['deleted'] }
-                });
-                
-                const subcategoryIds = subcategories.map(sub => sub._id);
-                subcategoryIds.push(category.parentCategory); // Inclure la catégorie parent elle-même
-                
-                const parentProductCount = await Product.countDocuments({
-                    categories: { $in: subcategoryIds },
-                    status: { $nin: ['deleted'] }
-                });
-                
-                await Category.findByIdAndUpdate(
-                    category.parentCategory,
-                    { 
-                        productCount: parentProductCount,
-                        updatedAt: new Date()
-                    },
-                    { new: true }
-                );
-            }
-        }
-    } catch (error) {
-        console.error('Erreur lors de la mise à jour du compteur de produits:', error);
-    }
-};
-
-// Modification de pharmacyProductsCreate
 const pharmacyProductsCreate = async (req, res) => {
     try {
         const { name, description, shortDescription, slug, categories, barcode, sku, cipCode, laboratoire, marque, price, originalPrice, cost, status, isVisible, isFeatured, isOnSale, requiresPrescription, prescriptionType, drugForm, dosage, packaging, activeIngredients, ageRestrictionMinAge, ageRestrictionMaxAge, contraindications, sideEffects, warnings, therapeuticClass, pharmacologicalClass, indicationsTherapeutiques, weight, metaTitle, metaDescription, keywords, instructions, storage, origin, pharmacies, isFragile, requiresColdChain} = req.body;
@@ -2759,8 +2581,6 @@ const pharmacyProductsCreate = async (req, res) => {
         return res.status(500).json({ error: error.message });
     }
 }
-
-// Modification de pharmacyProductsImport
 const pharmacyProductsImport = async (req, res) => {
     try {
         const { products } = req.body;
@@ -2980,6 +2800,59 @@ const pharmacyProductsImport = async (req, res) => {
 
     } catch (error) {
         return res.status(500).json({ error: error.message });
+    }
+};
+const updateCategoryProductCount = async (categoryIds) => {
+    try {
+        // S'assurer que categoryIds est un tableau
+        const categories = Array.isArray(categoryIds) ? categoryIds : [categoryIds];
+        
+        for (const categoryId of categories) {
+            // Compter les produits actifs dans cette catégorie
+            const productCount = await Product.countDocuments({
+                categories: categoryId,
+                status: { $nin: ['deleted'] }
+            });
+            
+            // Mettre à jour le compteur dans la catégorie
+            await Category.findByIdAndUpdate(
+                categoryId,
+                { 
+                    productCount: productCount,
+                    updatedAt: new Date()
+                },
+                { new: true }
+            );
+            
+            // Si cette catégorie a un parent, mettre à jour aussi le parent
+            const category = await Category.findById(categoryId);
+            if (category && category.parentCategory) {
+                // Calculer le total pour la catégorie parent (ses propres produits + ceux des sous-catégories)
+                const subcategories = await Category.find({ 
+                    parentCategory: category.parentCategory,
+                    status: { $nin: ['deleted'] }
+                });
+                
+                const subcategoryIds = subcategories.map(sub => sub._id);
+                subcategoryIds.push(category.parentCategory); // Inclure la catégorie parent elle-même
+                
+                const parentProductCount = await Product.countDocuments({
+                    categories: { $in: subcategoryIds },
+                    status: { $nin: ['deleted'] }
+                });
+                
+                await Category.findByIdAndUpdate(
+                    category.parentCategory,
+                    { 
+                        productCount: parentProductCount,
+                        updatedAt: new Date()
+                    },
+                    { new: true }
+                );
+            }
+        }
+    } catch (error) {
+        console.error('Erreur lors de la mise à jour du compteur de produits:', error);
     }
 };
 const pharmacyProductDetail = async(req, res)=> {
@@ -3234,6 +3107,155 @@ const productUpdate = async (req, res) => {
 
     } catch (error) {
         console.error('Erreur lors de la mise à jour du produit:', error);
+        return res.status(500).json({ success: false, error: error.message });
+    }
+};
+const uploadProductImages = async (req, res) => {
+    try {
+        const { type_, productId, uid, updateImage } = req.body;
+        const file = req.file;
+
+        const missingFields = [];
+        if (!file) missingFields.push('file');
+        if (!type_ || ('mainImage' != type_ && !type_.startsWith('images_'))) missingFields.push('type_');
+        if (!productId) missingFields.push('categoryId');
+        if (!uid) missingFields.push('uid');
+
+        if (missingFields.length > 0) {
+            return res.status(400).json({ message: 'Missing required fields', missingFields });
+        }
+        req.body.type = "admin"
+
+        const the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error) return res.status(404).json({ message: 'User not found' });
+        const user = the_admin.the_user;
+
+        const product = await Product.findOne({ _id: productId, status: { $nin: ['deleted'] } });
+        if (!product) {
+            return res.status(200).json({ error: 1, success: false, message: 'Produit non trouvé', errorMessage: 'Produit non trouvé'
+            });
+        }
+        if (!req.file) {
+            return res.status(200).json({ error: 1, success: false, message: 'Aucun fichier uploadé', errorMessage: 'Aucun fichier uploadé'});
+        }
+
+
+        const thetime = Date.now().toString();
+        const extension = file.originalname ? file.originalname.split('.').pop() : 'png';
+
+        const existant = (type_ == 'mainImage' || updateImage) ? await File.find({
+            fileType: type_,
+            'linkedTo.model': 'Product',
+            'linkedTo.objectId': product._id
+        }) : [];
+        if (existant.length > 0 && (type_ == 'mainImage' || updateImage) ) {
+            const params = {
+                fileType: type_,
+                'linkedTo.model': 'Product',
+                'linkedTo.objectId': product._id
+            };
+            if (updateImage) {
+                params._id = updateImage;
+            }
+            await File.deleteMany(params);
+            for (const f of existant) {
+                if (f.url && fs.existsSync(f.url)) {
+                    try { fs.unlinkSync(f.url); } catch (e) {}
+                }
+            }
+        }
+
+        const uploadDir = path.join(__dirname, '../../uploads', productId, type_);
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        const newFilePath = file.path.replace('uploads/',`uploads/${productId}/${type_}/` );
+        fs.renameSync(file.path, newFilePath);
+        file.path = newFilePath;
+        const file_ = new File({
+            originalName: file.originalname ?? ("new_file_" + thetime),
+            fileName: `${product.name}_${type_}_${thetime}.${extension}`,
+            fileType: type_,
+            fileSize: file.size,
+            url: file.path,
+            extension: extension,
+            uploadedBy: user._id,
+            linkedTo: { model: "Product", objectId: product._id, },
+            tags: [],
+            isPrivate: true,
+            meta: {
+                width: file.width ?? 200,
+                height: file.height ?? 200,
+                pages: file.page ?? 1
+            }
+        });
+        await file_.save();
+
+        if (type_ === 'mainImage') {
+            product.mainImage = file_._id;
+        } else if (type_.startsWith('images_')) {
+            if (!product.images) { product.images = []; }
+            product.images.push(file_._id);
+        }
+
+        await product.save();
+        await registerActivity('Product', product._id, user._id, "Image Ajoutée", `Une image a été ajoutée au produit ${product.name}`);
+
+        return res.status(200).json({
+            error: 0,
+            success: true,
+            message: 'Image uploadée avec succès',
+            data: { fileId: file_._id, file: file_ }
+        });
+
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+};
+const productDelete = async (req, res) => {
+    try {
+        let { id } = req.body;
+
+        if (!id) {
+            return res.status(200).json({ 
+                error: 1, 
+                success: false, 
+                message: 'Le produit n\'a pu être identifié', 
+                errorMessage: 'Le produit n\'a pu être identifié' 
+            });
+        }
+
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error) { 
+            return res.status(404).json({ message: 'User not found' }); 
+        }
+
+        const user = the_admin.the_user;
+        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        const existingProduct = await Product.findOne({ _id: id, status: { $nin: ['deleted'] } });
+        if (!existingProduct) {
+            return res.status(200).json({ 
+                error: 1, 
+                success: false, 
+                message: 'Produit non trouvé', 
+                errorMessage: 'Produit non trouvé' 
+            });
+        }
+
+        existingProduct.status = 'deleted';
+
+        await existingProduct.save();
+        await registerActivity('Product', existingProduct._id, user._id, "Suppression Produit", `Le produit ${existingProduct.name} a été supprimé par ${user.name} `);
+        
+        return res.status(200).json({ 
+            error: 0, 
+            success: true, 
+            message: "Produit supprimé avec succès!", 
+            user: user 
+        });
+    } catch (error) {
+        console.error('Erreur lors de la suppression du produit:', error);
         return res.status(500).json({ success: false, error: error.message });
     }
 };

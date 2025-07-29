@@ -51,40 +51,44 @@ router.post('/managers/pharmacies/documents/download', deliververifyFirebaseToke
 router.post('/managers/pharmacies/activities', deliververifyFirebaseToken, pharmacieActivities);
 
 //pharcy-managment
-router.post('/pharmacy-managment/dashboard', deliververifyFirebaseToken, loadGeneralsInfo);
-router.post('/pharmacy-managment/dashboard/activities', deliververifyFirebaseToken, loadAllActivities);
 
-router.post('/pharmacy-managment/pharmacies/list', deliververifyFirebaseToken, pharmacieList);
-router.post('/pharmacy-managment/pharmacies/details', deliververifyFirebaseToken, pharmacieDetails);
-router.post('/pharmacy-managment/pharmacies/activities', deliververifyFirebaseToken, pharmacieActivities);
-router.post('/pharmacy-managment/pharmacies/workingsHours', deliververifyFirebaseToken, pharmacieWorkingsHours);
-router.post('/pharmacy-managment/pharmacies/new', deliververifyFirebaseToken, pharmacieNew);
-router.post('/pharmacy-managment/pharmacies/edit', deliververifyFirebaseToken, pharmacieEdit);
-router.post('/pharmacy-managment/pharmacies/documents', deliververifyFirebaseToken, pharmacieDocuments);
-router.post('/pharmacy-managment/pharmacies/documents/download', deliververifyFirebaseToken, pharmacieDocumentsDownload);
-router.post('/pharmacy-managment/pharmacies/upload-document', deliververifyFirebaseToken, upload.single('file'), pharmacieDocumentsUpload);
-router.post('/pharmacy-managment/pharmacies/update', deliververifyFirebaseToken, pharmacieUpdate);
+    //dahbord
+    router.post('/pharmacy-managment/dashboard', deliververifyFirebaseToken, loadGeneralsInfo);
+    router.post('/pharmacy-managment/dashboard/activities', deliververifyFirebaseToken, loadAllActivities);
 
-router.post('/pharmacy-management/categories/list', deliververifyFirebaseToken, pharmacyCategoriesList);
-router.post('/pharmacy-management/categories/detail', deliververifyFirebaseToken, pharmacyCategoryDetail);
-router.post('/pharmacy-management/categories/create', deliververifyFirebaseToken, pharmacyCategoriesCreate);
-router.post('/pharmacy-managment/pharmacies/upload-images-cat', deliververifyFirebaseToken, upload.single('file'), pharmacieCategorieImagesUpload);
-router.post('/pharmacy-managment/categories/activities', deliververifyFirebaseToken, categoriesActivities);
-router.post('/pharmacy-management/categories/update', deliververifyFirebaseToken, categorieUpdate);
-router.post('/pharmacy-management/categories/delete', deliververifyFirebaseToken, categorieDelete);
-router.post('/pharmacy-management/categories/import', deliververifyFirebaseToken, pharmacyCategoriesImport);
+    router.post('/pharmacy-managment/pharmacies/list', deliververifyFirebaseToken, pharmacieList);
+    router.post('/pharmacy-managment/pharmacies/details', deliververifyFirebaseToken, pharmacieDetails);
+    router.post('/pharmacy-managment/pharmacies/activities', deliververifyFirebaseToken, pharmacieActivities);
+    router.post('/pharmacy-managment/pharmacies/workingsHours', deliververifyFirebaseToken, pharmacieWorkingsHours);
+    router.post('/pharmacy-managment/pharmacies/new', deliververifyFirebaseToken, pharmacieNew);
+    router.post('/pharmacy-managment/pharmacies/edit', deliververifyFirebaseToken, pharmacieEdit);
+    router.post('/pharmacy-managment/pharmacies/documents', deliververifyFirebaseToken, pharmacieDocuments);
+    router.post('/pharmacy-managment/pharmacies/documents/download', deliververifyFirebaseToken, pharmacieDocumentsDownload);
+    router.post('/pharmacy-managment/pharmacies/upload-document', deliververifyFirebaseToken, upload.single('file'), pharmacieDocumentsUpload);
+    router.post('/pharmacy-managment/pharmacies/update', deliververifyFirebaseToken, pharmacieUpdate);
 
-// Routes produits
-router.post('/pharmacy-management/products/list',deliververifyFirebaseToken, pharmacyProductsList);
-router.post('/pharmacy-management/products/create',deliververifyFirebaseToken, pharmacyProductsCreate);
-router.post('/pharmacy-management/products/import',deliververifyFirebaseToken, pharmacyProductsImport);
-router.post('/pharmacy-management/products/detail',deliververifyFirebaseToken, pharmacyProductDetail);
-router.post('/pharmacy-management/products/update',deliververifyFirebaseToken, productUpdate);
-router.post('/pharmacy-management/products/delete',deliververifyFirebaseToken, productDelete);
-router.post('/pharmacy-management/products/activities',deliververifyFirebaseToken, productsActivities);
-router.post('/pharmacy-management/products/upload-images', deliververifyFirebaseToken, upload.single('file'), uploadProductImages);
-router.post('/pharmacy-management/products/search',deliververifyFirebaseToken, productsAdvancedSearch);
-router.post('/pharmacy-management/products/stats',deliververifyFirebaseToken, productsStats);
+    //routes categories
+    router.post('/pharmacy-management/categories/list', deliververifyFirebaseToken, pharmacyCategoriesList);
+    router.post('/pharmacy-management/categories/detail', deliververifyFirebaseToken, pharmacyCategoryDetail);
+    router.post('/pharmacy-management/categories/create', deliververifyFirebaseToken, pharmacyCategoriesCreate);
+    router.post('/pharmacy-managment/pharmacies/upload-images-cat', deliververifyFirebaseToken, upload.single('file'), pharmacieCategorieImagesUpload);
+    router.post('/pharmacy-managment/categories/activities', deliververifyFirebaseToken, categoriesActivities);
+    router.post('/pharmacy-management/categories/update', deliververifyFirebaseToken, categorieUpdate);
+    router.post('/pharmacy-management/categories/delete', deliververifyFirebaseToken, categorieDelete);
+    router.post('/pharmacy-management/categories/import', deliververifyFirebaseToken, pharmacyCategoriesImport);
+
+    // Routes produits
+    router.post('/pharmacy-management/products/list',deliververifyFirebaseToken, pharmacyProductsList);
+    router.post('/pharmacy-management/products/create',deliververifyFirebaseToken, pharmacyProductsCreate);
+    router.post('/pharmacy-management/products/import',deliververifyFirebaseToken, pharmacyProductsImport);
+    router.post('/pharmacy-management/products/detail',deliververifyFirebaseToken, pharmacyProductDetail);
+    router.post('/pharmacy-management/products/update',deliververifyFirebaseToken, productUpdate);
+    router.post('/pharmacy-management/products/delete',deliververifyFirebaseToken, productDelete);
+    router.post('/pharmacy-management/products/activities',deliververifyFirebaseToken, productsActivities);
+    router.post('/pharmacy-management/products/upload-images', deliververifyFirebaseToken, upload.single('file'), uploadProductImages);
+    router.post('/pharmacy-management/products/search',deliververifyFirebaseToken, productsAdvancedSearch);
+    router.post('/pharmacy-management/products/stats',deliververifyFirebaseToken, productsStats);
+
 //tools
 router.post('/tools/get-countries-list' , getListCountries);
 
