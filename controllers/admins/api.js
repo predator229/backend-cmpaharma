@@ -67,7 +67,7 @@ const loadGeneralsInfo = async (req, res) => {
         if (the_admin.error ) {
             return res.status(404).json({ message: 'User not found' });
         }
-        user = the_admin.the_user;
+        const user = the_admin.the_user;
         user.photoURL =  user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
         user.onlyShowListPharm = the_admin.onlyShowListPharm;
 
@@ -216,27 +216,57 @@ const loadGeneralsInfo = async (req, res) => {
 };
 const loadAllActivities = async (req, res) => {
     try {
-        const { status, region, search, thisPeriod, user_ } = req.body;
+        const { status, region, search, thisPeriod, user_, all, prePage } = req.body;
         var the_admin = await getTheCurrentUserOrFailed(req, res);
 
         if (the_admin.error ) {
             return res.status(404).json({ message: 'User not found' });
         }
-        user = the_admin.the_user;
+        const user = the_admin.the_user;
         user.photoURL =  user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
 
+        const userInGroupAdmin = Array.isArray(user.groups) && user.groups.length > 0
+            ? user.groups.some(g => ['superadmin', 'manager_admin', 'admin_technique'].includes(g.code))
+            : false;
+
         query = {};
-        if (user_) { query.author = user_.toString(); }
-        // if (categories) { query.id_object = { $in: categories.map(c => c._id) }; }
-        const recentActivities = await Activity.find(query).sort({ created_at: -1 }).limit(parseInt(prePage) || 10);
+        if (user_ && typeof user_ === 'string') {
+            query.author = user_;
+        } else if (user_ && typeof user_.toString === 'function') {
+            query.author = user_.toString();
+        }
 
+        let query = {};
+        let results = [];
+        let ids = [];
+        let activities = [];
 
-        // const recentActivities = await Activity.find({})
-        //     .sort({ "created_at.date": -1 })
-        //     .limit(thisPeriod  ? parseInt(thisPeriod) :  50);
+        if (userInGroupAdmin) {
 
+            const sections = ['categories','pharmacies','products'];
+            for (const elmt of sections) {
+                switch (elmt) {
+                    case 'categories': results = await Category.find({});  break;
+                    case 'products': results = await Product.find({});  break;
+                    case 'pharmacies': results = Pharmacy.find({}); break;
+                    default:break;
+                }
+                results.forEach(p => {
+                    if (!ids.includes(p._id)){ ids.push(p._id) }
+                });
+            }
+            if (ids.length) { query.id_object = { $in: ids }; }
+
+            if (user_ && typeof user_ === 'string') {
+                query.author = user_;
+            } else if (user_ && typeof user_.toString === 'function') {
+                query.author = user_.toString();
+            }
+            activities = await Activity.find(query).sort({ created_at: -1 });
+        }
+        
         data = {
-            recent_activities: recentActivities,
+            recent_activities: activities,
         };
         return res.status(200).json({'error':0, user: user, data: data, onlyShowListPharm : the_admin.onlyShowListPharm });
     } catch (error) {
@@ -1390,7 +1420,7 @@ const pharmacieActivities = async (req, res) => {
             ? user.groups.some(g => ['superadmin', 'manager_admin', 'admin_technique'].includes(g.code))
             : false;
 
-        let { id, prePage, user_ } = req.body;
+        let { id, all, user_ } = req.body;
         if ( (!id || (Array.isArray(id) && id.length === 0)) && !userInGroupAdmin ) {
             id = user.pharmaciesManaged?.map( pharm => pharm._id );
             if (!id) {  return res.status(400).json({ message: 'Missing required fields'}); }
@@ -1402,9 +1432,13 @@ const pharmacieActivities = async (req, res) => {
         }
 
         query = {};
-        if (user_) { query.author = user_.toString(); }
+        if (user_ && typeof user_ === 'string') {
+            query.author = user_;
+        } else if (user_ && typeof user_.toString === 'function') {
+            query.author = user_.toString();
+        }
         if (pharmacies) { query.id_object = { $in: pharmacies.map(c => c._id) }; }
-        const activities = await Activity.find(query).sort({ created_at: -1 }).limit(parseInt(prePage) || 10);
+        const activities = all ? await Activity.find(query).sort({ created_at: -1 }) : await Activity.find(query).sort({ created_at: -1 }).limit(10);
 
         const validAuthorIds = activities
             ? activities.map(act => act.author).filter(id => mongoose.Types.ObjectId.isValid(id))
@@ -1437,7 +1471,7 @@ const AllPharmacieActivities = async (req, res) => {
             ? user.groups.some(g => ['superadmin', 'manager_admin', 'admin_technique'].includes(g.code))
             : false;
 
-        let {  user_ } = req.body;
+        let {  all, user_ } = req.body;
         const idPharmacies = user.pharmaciesManaged?.map( pharm => pharm._id );
 
         let pharmacies = idPharmacies ? await Pharmacy.find( {_id :  {$in : idPharmacies} }) : false;
@@ -1446,15 +1480,15 @@ const AllPharmacieActivities = async (req, res) => {
         }
 
         let query = {};
-        
+        let results = [];
+        let ids = [];
+    
         if (Array.isArray(pharmacies) && pharmacies.length) {
-            const sections = ['products','categories','pharmacies'];
-            let ids = [];
-            let results = [];
+            const sections = ['categories','pharmacies','products'];
             for (const elmt of sections) {
                 switch (elmt) {
-                    case 'categories': results = await Category.find({ pharmaciesList: { $in: idPharmacies } }); break;
-                    case 'products': results = await Product.find({ pharmaciesList: { $in: idPharmacies } }); break;
+                    case 'categories': results = await Category.find({ pharmaciesList: { $in: idPharmacies } });  break;
+                    case 'products': results = await Product.find({ "pharmacies.pharmacy": { $in: user.pharmaciesManaged.map(pharm => pharm._id) }} );  break;
                     case 'pharmacies': results = pharmacies; break;
                     default:break;
                 }
@@ -1469,7 +1503,7 @@ const AllPharmacieActivities = async (req, res) => {
         } else if (user_ && typeof user_.toString === 'function') {
             query.author = user_.toString();
         }
-        const activities = await Activity.find(query).sort({ created_at: -1 });
+        const activities = all ? await Activity.find(query).sort({ created_at: -1 }) : await Activity.find(query).sort({ created_at: -1 }).limit(10);
        
         const validAuthorIds = activities
             ? activities.map(act => act.author).filter(id => mongoose.Types.ObjectId.isValid(id))
@@ -1485,7 +1519,7 @@ const AllPharmacieActivities = async (req, res) => {
                 };
             }
         });
-        return res.status(200).json({'error':0,query, usersMap: usersMap, data: activities, user: user });
+        return res.status(200).json({'error':0, ids, usersMap: usersMap, data: activities, user: user });
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }
@@ -1597,6 +1631,7 @@ const pharmacyCategoriesCreate = async (req, res) => {
         if (restrictions) { query.restrictions = {$in:restrictions}; }
         if (specialCategory) { query.specialCategory = specialCategory; }
         if (pharmaciesList) { query.pharmaciesList = {$in: pharmaciesList}; }
+        else{ query.pharmaciesList =  { $in: user.pharmaciesManaged.map(pharm => pharm._id) }}
 
         query.status = { $nin : ['deleted'] };
 
@@ -1606,7 +1641,7 @@ const pharmacyCategoriesCreate = async (req, res) => {
         }
 
         if (slug){
-            let slugExist = await Category.findOne({ slug: slug, status: { $nin : ['deleted'] } });
+            let slugExist = await Category.findOne({ slug: slug, status: { $nin : ['deleted'] }, "pharmaciesList": { $in: user.pharmaciesManaged.map(pharm => pharm._id) } });
             if (slugExist){
                 return res.status(200).json({ error:1, success:false, errorMessage: 'Une categorie avec ces caracteristiques existe deja', message: 'Le slug existe deja pour une autre categorie' });
             }
@@ -1720,12 +1755,14 @@ const pharmacyCategoriesImport = async (req, res) => {
                 // Vérification de l'existence basée sur le nom et le slug
                 let existingByName = await Category.findOne({ 
                     name: categoryData.name, 
-                    status: { $nin: ['deleted'] } 
+                    status: { $nin: ['deleted'] } ,
+                    pharmaciesList: { $in: user.pharmaciesManaged.map(pharm => pharm._id) }
                 });
 
                 let existingBySlug = await Category.findOne({ 
                     slug: categoryData.slug, 
-                    status: { $nin: ['deleted'] } 
+                    status: { $nin: ['deleted'] },
+                    pharmaciesList: { $in: user.pharmaciesManaged.map(pharm => pharm._id) }
                 });
 
                 if (existingByName) {
@@ -1762,7 +1799,7 @@ const pharmacyCategoriesImport = async (req, res) => {
                     requiresPrescription: categoryData.requiresPrescription || false,
                     restrictions: categoryData.restrictions || [],
                     specialCategory: categoryData.specialCategory,
-                    pharmaciesList: categoryData.pharmaciesList,
+                    pharmaciesList: categoryData.pharmaciesList ?? user.pharmaciesManaged.map(pharm => pharm._id),
                     level: 0 // Par défaut niveau 0
                 });
 
@@ -1770,7 +1807,8 @@ const pharmacyCategoriesImport = async (req, res) => {
                 if (categoryData.parentCategory) {
                     let parentCategoryExist = await Category.findOne({ 
                         _id: categoryData.parentCategory, 
-                        status: { $nin: ['deleted'] } 
+                        status: { $nin: ['deleted'] } ,
+                        pharmaciesList: { $in: user.pharmaciesManaged.map(pharm => pharm._id) }
                     });
                     
                     if (!parentCategoryExist) {
@@ -1941,10 +1979,17 @@ const categoriesActivities = async (req, res) => {
             ? user.groups.some(g => ['superadmin', 'manager_admin', 'admin_technique'].includes(g.code))
             : false;
 
-        let { id, prePage, user_ } = req.body;
+        let { id, prePage, user_, all } = req.body;
         if ( (!id || (Array.isArray(id) && id.length === 0)) && !userInGroupAdmin ) {
             id = user.pharmaciesManaged?.map( pharm => pharm._id );
             if (!id) {  return res.status(400).json({ message: 'Missing required fields'}); }
+        }
+
+        let query = {};
+        if (user_ && typeof user_ === 'string') {
+            query.author = user_;
+        } else if (user_ && typeof user_.toString === 'function') {
+            query.author = user_.toString();
         }
 
         let categories = id ? await Category.find( Array.isArray(id) ? {status: { $nin : ['deleted'] }, pharmaciesList : {$in : id} } : { _id : id, status: { $nin : ['deleted'] } }) : false;
@@ -1952,9 +1997,11 @@ const categoriesActivities = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Catégorie non trouvée' });
         }
 
-        const activities = categories
-            ? await Activity.find({ id_object: categories.map(cat => cat._id) }).sort({ created_at: -1 }).limit(parseInt(prePage) || 10)
-            : await Activity.find().sort({ created_at: -1 }).limit(parseInt(prePage) || 10);
+        if (categories){
+            query.id_object = { $in : categories.map(cat => cat._id)};
+        }
+
+        const activities = all ? await Activity.find(query).sort({ created_at: -1 }) : await Activity.find(query).sort({ created_at: -1 }).limit(parseInt(prePage) || 10);
 
             const validAuthorIds = activities
             ? activities.map(act => act.author).filter(id => mongoose.Types.ObjectId.isValid(id))
@@ -2020,7 +2067,7 @@ const categorieUpdate = async (req, res) => {
 
         // Check for duplicate category (excluding current)
         if (slug) {
-            let slugExist = await Category.findOne({ _id: { $ne: _id }, slug: slug, status: { $nin : ['deleted'] } });
+            let slugExist = await Category.findOne({ _id: { $ne: _id }, slug: slug, status: { $nin : ['deleted'] }, "pharmaciesList": { $in: user.pharmaciesManaged.map(pharm => pharm._id) } });
             if (slugExist) {
                 return res.status(200).json({ error: 1, success: false, errorMessage: 'Le slug existe deja pour une autre categorie', message: 'Le slug existe deja pour une autre categorie' });
             }
@@ -2028,7 +2075,7 @@ const categorieUpdate = async (req, res) => {
 
         let level = 0;
         if (parentCategory) {
-            let parentCategoryExist = await Category.findOne({ _id: parentCategory, status: { $nin : ['deleted'] } });
+            let parentCategoryExist = await Category.findOne({ _id: parentCategory, status: { $nin : ['deleted'] }, "pharmacies": { $in: user.pharmaciesManaged.map(pharm => pharm._id) } });
             if (!parentCategoryExist) {
                 return res.status(200).json({ error: 1, success: false, errorMessage: 'La categorie parent n\'existe pas', message: 'La categorie parent n\'existe pas' });
             }
@@ -2266,7 +2313,7 @@ const productsActivities = async (req, res) => {
             ? user.groups.some(g => ['superadmin', 'manager_admin', 'admin_technique'].includes(g.code))
             : false;
 
-        let { id, prePage, user_ } = req.body;
+        let { id, prePage, user_, all } = req.body;
         if ((!id || (Array.isArray(id) && id.length === 0)) && !userInGroupAdmin) {
             id = user.pharmaciesManaged?.map(pharm => pharm._id);
             if (!id) {
@@ -2287,7 +2334,7 @@ const productsActivities = async (req, res) => {
         query = {};
         if (user_) { query.author = user_.toString(); }
         if (products) { query.id_object = { $in: products.map(c => c._id)}; }
-        const activities = await Activity.find(query).sort({ created_at: -1 }).limit(parseInt(prePage) || 10);
+        const activities = all ? await Activity.find(query).sort({ created_at: -1 }) : await Activity.find(query).sort({ created_at: -1 }).limit(parseInt(prePage) || 10);
 
         const validAuthorIds = activities
             ? activities.map(act => act.author).filter(id => mongoose.Types.ObjectId.isValid(id))
@@ -2576,7 +2623,9 @@ const pharmacyProductsCreate = async (req, res) => {
         if (metaDescription) { query.metaDescription = metaDescription; }
         if (keywords) { query.keywords = {$in : keywords}; }
         if (requiresPrescription) { query.requiresPrescription = requiresPrescription; }
-        if (pharmacies) { query['pharmacies.pharmacy'] = {$in: pharmacies}; }
+        if (pharmacies) { query['pharmacies.pharmacy'] = {$in: pharmacies}; }else{
+            query['pharmacies.pharmacy'] = {$in: user.pharmaciesManaged.map(pharm => pharm._id)};
+        }
 
         query.status = { $nin : ['deleted'] };
 
@@ -2586,28 +2635,28 @@ const pharmacyProductsCreate = async (req, res) => {
         }
 
         if (slug){
-            let slugExist = await Product.findOne({ slug: slug, status: { $nin : ['deleted'] } });
+            let slugExist = await Product.findOne({ slug: slug, status: { $nin : ['deleted'] }, "pharmacies.pharmacy": { $in: user.pharmaciesManaged.map(pharm => pharm._id) }});
             if (slugExist){
                 return res.status(200).json({ error:1, success:false, errorMessage: 'Un produit avec ces caracteristiques existe deja', message: 'Le slug existe deja pour un autre produit' });
             }
         }
 
         if (sku){
-            let skuExist = await Product.findOne({ sku: sku, status: { $nin : ['deleted'] } });
+            let skuExist = await Product.findOne({ sku: sku, status: { $nin : ['deleted'] }, "pharmacies.pharmacy": { $in: user.pharmaciesManaged.map(pharm => pharm._id) }});
             if (skuExist){
                 return res.status(200).json({ error:1, success:false, errorMessage: 'Un produit avec ce SKU existe deja', message: 'Le SKU existe deja pour un autre produit' });
             }
         }
 
         if (barcode){
-            let barcodeExist = await Product.findOne({ barcode: barcode, status: { $nin : ['deleted'] } });
+            let barcodeExist = await Product.findOne({ barcode: barcode, status: { $nin : ['deleted'] }, "pharmacies.pharmacy": { $in: user.pharmaciesManaged.map(pharm => pharm._id) } });
             if (barcodeExist){
                 return res.status(200).json({ error:1, success:false, errorMessage: 'Un produit avec ce code-barres existe deja', message: 'Le code-barres existe deja pour un autre produit' });
             }
         }
 
         if (cipCode){
-            let cipExist = await Product.findOne({ cipCode: cipCode, status: { $nin : ['deleted'] } });
+            let cipExist = await Product.findOne({ cipCode: cipCode, status: { $nin : ['deleted'] }, "pharmacies.pharmacy": { $in: user.pharmaciesManaged.map(pharm => pharm._id) } });
             if (cipExist){
                 return res.status(200).json({ error:1, success:false, errorMessage: 'Un produit avec ce code CIP existe deja', message: 'Le code CIP existe deja pour un autre produit' });
             }
@@ -2713,6 +2762,7 @@ const pharmacyProductsImport = async (req, res) => {
         user = the_admin.the_user;
         user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
 
+
         if (!products || !Array.isArray(products) || products.length === 0) {
             return res.status(200).json({ 
                 error: 1, 
@@ -2751,30 +2801,40 @@ const pharmacyProductsImport = async (req, res) => {
                 // Vérification de l'existence basée sur le nom et le SKU
                 let existingByName = await Product.findOne({ 
                     name: productData.name, 
-                    status: { $nin: ['deleted'] } 
+                    status: { $nin: ['deleted'] } ,
+                    "pharmacies.pharmacy": { $in: user.pharmaciesManaged.map(pharm => pharm._id) }
                 });
 
                 let existingBySku = await Product.findOne({ 
                     sku: productData.sku, 
-                    status: { $nin: ['deleted'] } 
+                    status: { $nin: ['deleted'] } ,
+                    "pharmacies.pharmacy": { $in: user.pharmaciesManaged.map(pharm => pharm._id) }
                 });
 
                 if (existingByName) {
+                    const conflictingPharmacies = existingByName.pharmacies
+                        .filter(p => user.pharmaciesManaged.some(managed => managed._id.toString() === p.pharmacy.toString()))
+                        .map(p => p.pharmacy);
+
                     importResults.errors++;
                     importResults.errorDetails.push({
                         row: i + 1,
                         name: productData.name,
-                        error: 'Un produit avec ce nom existe déjà'
+                        error: `Un produit avec ce nom existe déjà dans les pharmacies : ${conflictingPharmacies.join(', ')}`
                     });
                     continue;
                 }
 
                 if (existingBySku) {
+                    const conflictingPharmacies = existingByName.pharmacies
+                        .filter(p => user.pharmaciesManaged.some(managed => managed._id.toString() === p.pharmacy.toString()))
+                        .map(p => p.pharmacy);
+
                     importResults.errors++;
                     importResults.errorDetails.push({
                         row: i + 1,
                         name: productData.name,
-                        error: 'Un produit avec ce SKU existe déjà'
+                        error: `Un produit avec ce SKU existe déjà dans les pharmacies : ${conflictingPharmacies.join(', ')}`
                     });
                     continue;
                 }
@@ -3159,28 +3219,28 @@ const productUpdate = async (req, res) => {
 
         // Check for duplicate product (excluding current)
         if (slug) {
-            let slugExist = await Product.findOne({ _id: { $ne: _id }, slug: slug, status: { $nin : ['deleted'] } });
+            let slugExist = await Product.findOne({ _id: { $ne: _id }, slug: slug, status: { $nin : ['deleted'] }, "pharmacies.pharmacy": { $in: user.pharmaciesManaged.map(pharm => pharm._id) } });
             if (slugExist) {
                 return res.status(200).json({ error: 1, success: false, errorMessage: 'Le slug existe deja pour un autre produit', message: 'Le slug existe deja pour un autre produit' });
             }
         }
 
         if (sku) {
-            let skuExist = await Product.findOne({ _id: { $ne: _id }, sku: sku, status: { $nin : ['deleted'] } });
+            let skuExist = await Product.findOne({ _id: { $ne: _id }, sku: sku, status: { $nin : ['deleted'] }, "pharmacies.pharmacy": { $in: user.pharmaciesManaged.map(pharm => pharm._id) } });
             if (skuExist) {
                 return res.status(200).json({ error: 1, success: false, errorMessage: 'Le SKU existe deja pour un autre produit', message: 'Le SKU existe deja pour un autre produit' });
             }
         }
 
         if (barcode) {
-            let barcodeExist = await Product.findOne({ _id: { $ne: _id }, barcode: barcode, status: { $nin : ['deleted'] } });
+            let barcodeExist = await Product.findOne({ _id: { $ne: _id }, barcode: barcode, status: { $nin : ['deleted'] }, "pharmacies.pharmacy": { $in: user.pharmaciesManaged.map(pharm => pharm._id) } });
             if (barcodeExist) {
                 return res.status(200).json({ error: 1, success: false, errorMessage: 'Le code-barres existe deja pour un autre produit', message: 'Le code-barres existe deja pour un autre produit' });
             }
         }
 
         if (cipCode) {
-            let cipExist = await Product.findOne({ _id: { $ne: _id }, cipCode: cipCode, status: { $nin : ['deleted'] } });
+            let cipExist = await Product.findOne({ _id: { $ne: _id }, cipCode: cipCode, status: { $nin : ['deleted'] }, "pharmacies.pharmacy": { $in: user.pharmaciesManaged.map(pharm => pharm._id) } });
             if (cipExist) {
                 return res.status(200).json({ error: 1, success: false, errorMessage: 'Le code CIP existe deja pour un autre produit', message: 'Le code CIP existe deja pour un autre produit' });
             }

@@ -4,16 +4,16 @@ const ProductSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   description: { type: String, required: false, trim: true },
   shortDescription: { type: String, required: false, trim: true, maxlength: 200 },
-  slug: { type: String, required: true, unique: true, trim: true, lowercase: true },
+  slug: { type: String, required: true, trim: true, lowercase: true },
   
   // Classification
   // category: { type: mongoose.Schema.Types.ObjectId, ref: 'Category', required: true },
   categories: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Category' }],
   
   // Informations pharmaceutiques
-  barcode: { type: String, required: false, unique: true, sparse: true },
-  sku: { type: String, required: true, unique: true, trim: true },
-  cipCode: { type: String, required: false, unique: true, sparse: true }, // Code CIP pour les médicaments
+  barcode: { type: String, required: false, sparse: true },
+  sku: { type: String, required: true, trim: true },
+  cipCode: { type: String, required: false, sparse: true }, // Code CIP pour les médicaments
   laboratoire: { type: String, required: false, trim: true },
   marque: { type: String, required: false, trim: true },
   
@@ -131,9 +131,9 @@ const ProductSchema = new mongoose.Schema({
 // Index pour les recherches
 ProductSchema.index({ name: 'text', description: 'text', shortDescription: 'text' });
 ProductSchema.index({ category: 1, status: 1 });
-// ProductSchema.index({ barcode: 1 }, { unique: true, sparse: true });
-// ProductSchema.index({ sku: 1 }, { unique: true });
-// ProductSchema.index({ cipCode: 1 }, { unique: true, sparse: true });
+// ProductSchema.index({ barcode: 1 }, , sparse: true });
+// ProductSchema.index({ sku: 1 },  });
+// ProductSchema.index({ cipCode: 1 }, , sparse: true });
 ProductSchema.index({ price: 1 });
 ProductSchema.index({ isFeatured: 1, status: 1 });
 ProductSchema.index({ 'pharmacies.pharmacy': 1 });
