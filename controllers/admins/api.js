@@ -264,7 +264,7 @@ const loadAllActivities = async (req, res) => {
             }
             activities = await Activity.find(query).sort({ created_at: -1 });
         }
-        
+
         data = {
             recent_activities: activities,
         };
@@ -3614,5 +3614,489 @@ const loadHistoricMiniChat = async (req, res) => {
         return res.status(500).json({ error: error.message });
     }
 }
+// const pharmacyUsersList = async (req, res) => {
+//     try {
+//         const { status, pharmaciesId, search, email, name, surnmame } = req.body;
 
-module.exports = { authentificateUser, setProfilInfo, loadGeneralsInfo, loadAllActivities, setSettingsFont, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload, pharmacieUpdate, pharmacieDocumentsUpload, pharmacieWorkingsHours, pharmacieActivities, loadHistoricMiniChat, pharmacyCategoriesList, pharmacieCategorieImagesUpload, pharmacyCategoriesCreate, pharmacyCategoryDetail, categoriesActivities, categorieUpdate, categorieDelete, pharmacyCategoriesImport, pharmacyProductsList, pharmacyProductsCreate, productsActivities, uploadProductImages, productsAdvancedSearch, productsStats, productDelete, pharmacyProductsImport, pharmacyProductDetail, productUpdate, AllPharmacieActivities };
+//         // page: this.currentPage,
+//         // limit: this.itemsPerPage,
+//         // search: this.searchTerm,
+//         // status: this.selectedStatus,
+//         // role: this.selectedRole,
+//         // pharmacy: this.selectedPharmacy,
+//         // sortBy: this.sortBy,
+//         // sortOrder: this.sortOrder
+
+
+//         var the_admin = await getTheCurrentUserOrFailed(req, res);
+
+//         if (the_admin.error) {
+//             return res.status(404).json({ message: 'User not found' });
+//         }
+        
+//         const user = the_admin.the_user;
+//         user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+//         let query = {};
+//         const pharmaciesManaged = pharmaciesId ? ( Array.isArray(pharmaciesId) ? pharmaciesId : [pharmaciesId] ) : (user?.groups?.some(g => ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].includes(g.code))  ? user.pharmaciesManaged.map(pharm => pharm._id)  : []);
+        
+//         if (!pharmaciesManaged) {
+//             return res.status(200).json({ 'error':1, success: false, message:'Vous n\'avez aucune pharmacie !', errorMessage:'Vous n\'avez aucune pharmacie !' });
+//         }
+//         else { query.pharmaciesManaged = { $in: pharmaciesId }; }
+
+//         if (status) {  query.status = status;  }
+//         else { query.status = { $nin: ['deleted'] }; }
+
+//         if (search) {
+//             const cleanedSearch = search.replace(/\s+/g, '').trim();
+//             const regex = new RegExp(cleanedSearch, 'i');
+//             query.$or = [
+//                 { name: regex },
+//                 { surname: regex },
+//                 { city: regex },
+//                 { address: regex },
+//                 { email: regex },
+//             ];
+//         }
+
+//         const pharmaciesList = user?.groups?.some(g => ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].includes(g.code)) 
+//             ? user.pharmaciesManaged.map(pharm => ({ value: pharm._id, label: pharm.name })) 
+//             : [];
+//         const groups = Group.find({ code: {$in : ['support_admin', 'manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant']} }).populate('permissions');
+
+//         let users = await Admin.find(query)
+//                 .populate([
+//                     { path: 'country' },
+//                     { path: 'pharmaciesManaged' },
+//                     { path: 'phone' },
+//                     { path: 'mobils' },
+//                     { path: 'setups' },
+//                     { path: 'groups', populate: [
+//                         { path: 'permissions' }
+//                     ]}
+//                 ])
+//                 .lean();
+
+//         return res.status(200).json({ 'error': 0, user: user, data: users, pharmaciesList, groups });
+//     } catch (error) {
+//         return res.status(500).json({ error: error.message });
+//     }
+// };
+
+const pharmacyUsersList = async (req, res) => {
+    try {
+        const { page = 1, limit = 10,search,status,role,pharmacy,sortBy = 'createdAt',sortOrder = 'desc',pharmaciesId,email,name,surname } = req.body;
+
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error) { return res.status(404).json({ message: 'User not found' }); }
+        
+        const user = the_admin.the_user;
+        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        let query = {};
+        
+        let pharmaciesManaged = user?.groups?.some(g => [ 'manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].includes(g.code))
+                    ? user.pharmaciesManaged.map(pharm => pharm._id)
+                    : [];;
+        if (pharmacy && pharmaciesManaged.includes(pharmacy)) {
+            pharmaciesManaged = [pharmacy];
+        } else if (pharmaciesId) {
+            pharmaciesManaged = (Array.isArray(pharmaciesId) ? pharmaciesId : [pharmaciesId]).map(phamr => pharmaciesManaged.includes(phamr) ? phamr : null).filter(Boolean);
+        } 
+        // else {
+        //     const canManageAllPharmacies = user?.groups?.some(g => ['manager_pharmacy'].includes(g.code));
+        //     if (canManageAllPharmacies) {
+        //         pharmaciesManaged = null;
+        //     }         
+
+        if (pharmaciesManaged && pharmaciesManaged.length > 0) {
+            query.pharmaciesManaged = { $in: pharmaciesManaged };
+        } else if (pharmaciesManaged !== null && pharmaciesManaged?.length === 0) {
+            return res.status(200).json({ 
+                'error': 1, 
+                success: false, 
+                message: 'Vous n\'avez aucune pharmacie !', 
+                errorMessage: 'Vous n\'avez aucune pharmacie !',
+            });
+        }
+
+        // Status filter
+        if (status) {
+            switch (status) {
+                case 'active': query.disabled = false; query.isActivated = true; break;
+                case 'disabled': query.disabled = true; break;
+                case 'not_activated': query.isActivated = false; break;
+                case 'locked': query.accountLockedUntil = { $gte: new Date() }; break;
+                default: query.isActivated = { $nin: [false] }; break;
+            }
+        } else {
+            query.isActivated = { $nin: [false] };
+        }
+
+        if (role) {
+            const roleGroup = await Group.findOne({ code: role });
+            if (roleGroup) {
+                query.groups = { $in: [roleGroup._id] };
+            }
+        }
+
+        if (search) {
+            const cleanedSearch = search.replace(/\s+/g, '').trim();
+            const regex = new RegExp(cleanedSearch, 'i');
+            query.$or = [
+                { name: regex },
+                { surname: regex },
+                { email: regex },
+                { address: regex },
+            ];
+        }
+
+        if (email) { query.email = new RegExp(email, 'i'); }
+        if (name) { query.name = new RegExp(name, 'i'); }
+        if (surname) { query.surname = new RegExp(surname, 'i');}
+
+        let sortObject = {};
+        const validSortFields = ['name', 'surname', 'email', 'createdAt', 'updatedAt', 'lastLogin'];
+        const sortField = validSortFields.includes(sortBy) ? sortBy : 'createdAt';
+        const sortDirection = sortOrder === 'asc' ? 1 : -1;
+        sortObject[sortField] = sortDirection;
+
+        const pageNum = Math.max(1, parseInt(page));
+        const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
+        const skip = (pageNum - 1) * limitNum;
+
+        const totalUsers = await Admin.countDocuments(query);
+        const totalPages = Math.ceil(totalUsers / limitNum);
+
+        let users = await Admin.find(query)
+            .populate([
+                {  path: 'country', select: 'name code dialCode flag' },
+                { 
+                    path: 'city',
+                    select: 'name postalCode',
+                    populate: { path: 'country', select: 'name code' }
+                },
+                { 
+                    path: 'pharmaciesManaged',
+                    select: 'name address phoneNumber email licenseNumber isActive',
+                    populate: [ { path: 'city', select: 'name' }, { path: 'country', select: 'name' } ]
+                },
+                { path: 'phone', },
+                { 
+                    path: 'mobils',
+                    select: 'number isVerified type isPrimary',
+                    populate: { path: 'country', select: 'name dialCode' }
+                },
+                { 
+                    path: 'setups',
+                    select: 'theme language timezone dateFormat currency notifications'
+                },
+                { 
+                    path: 'groups', 
+                    select: 'name code description isActive',
+                    populate: { path: 'permissions', select: 'name code description' }
+                }
+            ])
+            .sort(sortObject)
+            .skip(skip)
+            .limit(limitNum)
+            .lean();
+
+        if (search) {
+            const searchRegex = new RegExp(search, 'i');
+            users = users.filter(user => {
+                return user.name?.match(searchRegex) ||
+                       user.surname?.match(searchRegex) ||
+                       user.email?.match(searchRegex) ||
+                       user.address?.match(searchRegex) ||
+                       user.city?.name?.match(searchRegex) ||
+                       user.country?.name?.match(searchRegex) ||
+                       user.pharmaciesManaged?.some(p => p.name?.match(searchRegex));
+            });
+        }
+
+        users = users.map(usss => ({
+            ...usss,
+            photoURL: usss.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(usss.name || 'User')}&background=random&size=500`,
+            isActive: !usss.disabled && usss.isActivated,
+            isAccountLocked: usss.accountLockedUntil && new Date(usss.accountLockedUntil) > new Date(),
+            fullName: [usss.name, usss.surname].filter(Boolean).join(' ') || usss.email || 'Utilisateur sans nom'
+        }));
+
+        const pharmaciesList = user?.groups?.some(g => ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].includes(g.code)) 
+            ? user.pharmaciesManaged.map(pharm => ({ 
+                value: pharm._id, 
+                label: pharm.name 
+              })) 
+            : [];
+
+        const groups = await Group.find({ 
+            code: { $in: ['support_admin', 'manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'] },
+            isActive: true
+        })
+        .populate('permissions')
+        .select('name code description isActive permissions')
+        .lean();
+
+        return res.status(200).json({ 
+            'error': 0, 
+            success: true,
+            user: user, 
+            data: {
+                users: users,
+                total: totalUsers,
+                page: pageNum,
+                limit: limitNum,
+                totalPages: totalPages,
+                hasNextPage: pageNum < totalPages,
+                hasPrevPage: pageNum > 1
+            },
+            pharmaciesList,
+            groups,
+            filters: { status, role, pharmacy, search },
+            sorting: { sortBy: sortField, sortOrder
+            }
+        });
+
+    } catch (error) {
+        console.error('Error in pharmacyUsersList:', error);
+        return res.status(500).json({  error: 1, success: false, message: 'Erreur serveur', errorMessage: error.message
+        });
+    }
+};
+
+// Additional endpoint for user creation
+const createPharmacyUser = async (req, res) => {
+    try {
+        const {
+            name,
+            surname,
+            email,
+            phone,
+            country,
+            city,
+            address,
+            groups = [],
+            pharmaciesManaged = [],
+            sendWelcomeEmail = true,
+            isActivated = true
+        } = req.body;
+
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        const currentUser = the_admin.the_user;
+
+        // Check permissions
+        const canCreateUsers = currentUser?.groups?.some(g => ['manager_pharmacy'].includes(g.code)) ||
+                              currentUser.hasPermission?.('users.create');
+
+        if (!canCreateUsers) {
+            return res.status(403).json({
+                error: 1,
+                success: false,
+                message: 'Permissions insuffisantes',
+                errorMessage: 'Vous n\'avez pas les permissions pour créer des utilisateurs'
+            });
+        }
+
+        // Check if email already exists
+        const existingUser = await Admin.findOne({ email: email.toLowerCase() });
+        if (existingUser) {
+            return res.status(400).json({
+                error: 1,
+                success: false,
+                message: 'Email déjà utilisé',
+                errorMessage: 'Un utilisateur avec cet email existe déjà'
+            });
+        }
+
+        // Validate groups
+        const validGroups = await Group.find({
+            _id: { $in: groups },
+            code: { $in: ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'] }
+        });
+
+        if (validGroups.length !== groups.length) {
+            return res.status(400).json({
+                error: 1,
+                success: false,
+                message: 'Groupes invalides',
+                errorMessage: 'Un ou plusieurs groupes sélectionnés sont invalides'
+            });
+        }
+
+        // Create phone object if provided
+        let phoneObject = null;
+        if (phone && country) {
+            phoneObject = new Mobil({
+                number: phone,
+                country: country,
+                type: 'mobile',
+                isPrimary: true
+            });
+            await phoneObject.save();
+        }
+
+        // Create new user
+        const newUser = new Admin({
+            name,
+            surname,
+            email: email.toLowerCase(),
+            country,
+            city,
+            address,
+            phone: phoneObject?._id,
+            mobils: phoneObject ? [phoneObject._id] : [],
+            groups: validGroups.map(g => g._id),
+            pharmaciesManaged,
+            isActivated,
+            disabled: false,
+            setups: new SetupBase({})
+        });
+
+        await newUser.save();
+
+        // Populate the new user for response
+        const populatedUser = await Admin.findById(newUser._id)
+            .populate([
+                { path: 'country', select: 'name code dialCode flag' },
+                { path: 'city', select: 'name postalCode' },
+                { path: 'pharmaciesManaged', select: 'name address phoneNumber' },
+                { path: 'phone', select: 'number type' },
+                { path: 'groups', select: 'name code description' }
+            ]);
+
+        // Send welcome email if requested
+        if (sendWelcomeEmail) {
+            // TODO: Implement email sending logic
+            console.log(`Welcome email should be sent to ${email}`);
+        }
+
+        return res.status(201).json({
+            error: 0,
+            success: true,
+            message: 'Utilisateur créé avec succès',
+            data: populatedUser
+        });
+
+    } catch (error) {
+        console.error('Error in createPharmacyUser:', error);
+        return res.status(500).json({
+            error: 1,
+            success: false,
+            message: 'Erreur serveur',
+            errorMessage: error.message
+        });
+    }
+};
+
+// Bulk actions endpoint
+const bulkUserActions = async (req, res) => {
+    try {
+        const {
+            action,
+            userIds = [],
+            newStatus,
+            newGroups = [],
+            newPharmacy
+        } = req.body;
+
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        const currentUser = the_admin.the_user;
+
+        // Check permissions
+        const canBulkEdit = currentUser?.groups?.some(g => ['manager_pharmacy'].includes(g.code)) ||
+                           currentUser.hasPermission?.('users.bulk');
+
+        if (!canBulkEdit) {
+            return res.status(403).json({
+                error: 1,
+                success: false,
+                message: 'Permissions insuffisantes',
+                errorMessage: 'Vous n\'avez pas les permissions pour les actions en lot'
+            });
+        }
+
+        if (!userIds.length) {
+            return res.status(400).json({
+                error: 1,
+                success: false,
+                message: 'Aucun utilisateur sélectionné',
+                errorMessage: 'Veuillez sélectionner au moins un utilisateur'
+            });
+        }
+
+        let updateObject = {};
+        let result;
+
+        switch (action) {
+            case 'activate':
+                updateObject = { disabled: false, isActivated: true };
+                break;
+            case 'deactivate':
+                updateObject = { disabled: true };
+                break;
+            case 'change_status':
+                if (newStatus === 'active') {
+                    updateObject = { disabled: false, isActivated: true };
+                } else if (newStatus === 'disabled') {
+                    updateObject = { disabled: true };
+                }
+                break;
+            case 'assign_groups':
+                if (newGroups.length) {
+                    updateObject = { groups: newGroups };
+                }
+                break;
+            case 'assign_pharmacy':
+                if (newPharmacy) {
+                    updateObject = { $addToSet: { pharmaciesManaged: newPharmacy } };
+                }
+                break;
+            default:
+                return res.status(400).json({
+                    error: 1,
+                    success: false,
+                    message: 'Action invalide',
+                    errorMessage: 'L\'action spécifiée n\'est pas supportée'
+                });
+        }
+
+        result = await Admin.updateMany(
+            { _id: { $in: userIds } },
+            updateObject
+        );
+
+        return res.status(200).json({
+            error: 0,
+            success: true,
+            message: `Action exécutée sur ${result.modifiedCount} utilisateur(s)`,
+            data: {
+                matchedCount: result.matchedCount,
+                modifiedCount: result.modifiedCount,
+                action
+            }
+        });
+
+    } catch (error) {
+        console.error('Error in bulkUserActions:', error);
+        return res.status(500).json({
+            error: 1,
+            success: false,
+            message: 'Erreur serveur',
+            errorMessage: error.message
+        });
+    }
+};
+// createPharmacyUser,
+//     bulkUserActions
+
+module.exports = { authentificateUser, setProfilInfo, loadGeneralsInfo, loadAllActivities, setSettingsFont, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload, pharmacieUpdate, pharmacieDocumentsUpload, pharmacieWorkingsHours, pharmacieActivities, loadHistoricMiniChat, pharmacyCategoriesList, pharmacieCategorieImagesUpload, pharmacyCategoriesCreate, pharmacyCategoryDetail, categoriesActivities, categorieUpdate, categorieDelete, pharmacyCategoriesImport, pharmacyProductsList, pharmacyProductsCreate, productsActivities, uploadProductImages, productsAdvancedSearch, productsStats, productDelete, pharmacyProductsImport, pharmacyProductDetail, productUpdate, AllPharmacieActivities, pharmacyUsersList };
