@@ -216,7 +216,7 @@ const loadGeneralsInfo = async (req, res) => {
 };
 const loadAllActivities = async (req, res) => {
     try {
-        const { status, region, search, thisPeriod } = req.body;
+        const { status, region, search, thisPeriod, user_ } = req.body;
         var the_admin = await getTheCurrentUserOrFailed(req, res);
 
         if (the_admin.error ) {
@@ -225,9 +225,15 @@ const loadAllActivities = async (req, res) => {
         user = the_admin.the_user;
         user.photoURL =  user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
 
-        const recentActivities = await Activity.find({})
-            .sort({ "created_at.date": -1 })
-            .limit(thisPeriod  ? parseInt(thisPeriod) :  50);
+        query = {};
+        if (user_) { query.author = user_.toString(); }
+        // if (categories) { query.id_object = { $in: categories.map(c => c._id) }; }
+        const recentActivities = await Activity.find(query).sort({ created_at: -1 }).limit(parseInt(prePage) || 10);
+
+
+        // const recentActivities = await Activity.find({})
+        //     .sort({ "created_at.date": -1 })
+        //     .limit(thisPeriod  ? parseInt(thisPeriod) :  50);
 
         data = {
             recent_activities: recentActivities,
@@ -293,7 +299,7 @@ const setSettingsFont = async (req, res) => {
 };
 const pharmacieList = async (req, res) => {
     try {
-        const { status, region, search } = req.body;
+        const { status, region, search, andUsersList } = req.body;
         var the_admin = await getTheCurrentUserOrFailed(req, res);
 
         if (the_admin.error ) {
@@ -343,7 +349,18 @@ const pharmacieList = async (req, res) => {
             if (!pharmacy.id) { pharmacy.id = pharmacy._id; }
             return pharmacy;
         }));
-        return res.status(200).json({'error':0, user: user, data: pharmacies, onlyShowListPharm : the_admin.onlyShowListPharm });
+
+        const usersList = {};
+        const usersArray = [];
+        if (andUsersList) {
+            const users = pharmacies.map(pharm => pharm._id) ? await Admin.find({ pharmaciesManaged: { $in: pharmacies.map(pharm => pharm._id) } }) : [];
+            users.map(user => {
+                if (!usersList[user._id]) { usersList[user._id] = { key: user._id, name: user.name+' '+user.surname }; }
+                usersArray.push({ key: user._id, name: user.name+' '+user.surname });
+            });
+        }
+
+        return res.status(200).json({'error':0,  usersArray, usersList, user: user, data: pharmacies, onlyShowListPharm : the_admin.onlyShowListPharm });
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }
@@ -1373,7 +1390,7 @@ const pharmacieActivities = async (req, res) => {
             ? user.groups.some(g => ['superadmin', 'manager_admin', 'admin_technique'].includes(g.code))
             : false;
 
-        let { id, prePage } = req.body;
+        let { id, prePage, user_ } = req.body;
         if ( (!id || (Array.isArray(id) && id.length === 0)) && !userInGroupAdmin ) {
             id = user.pharmaciesManaged?.map( pharm => pharm._id );
             if (!id) {  return res.status(400).json({ message: 'Missing required fields'}); }
@@ -1384,9 +1401,10 @@ const pharmacieActivities = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Pharmacie non trouvée' });
         }
 
-        const activities = pharmacies
-            ? await Activity.find({ id_object: pharmacies.map(pharm => pharm._id) }).sort({ created_at: -1 }).limit(parseInt(prePage) || 10)
-            : await Activity.find().sort({ created_at: -1 }).limit(parseInt(prePage) || 10);
+        query = {};
+        if (user_) { query.author = user_.toString(); }
+        if (pharmacies) { query.id_object = { $in: pharmacies.map(c => c._id) }; }
+        const activities = await Activity.find(query).sort({ created_at: -1 }).limit(parseInt(prePage) || 10);
 
         const validAuthorIds = activities
             ? activities.map(act => act.author).filter(id => mongoose.Types.ObjectId.isValid(id))
@@ -1419,37 +1437,39 @@ const AllPharmacieActivities = async (req, res) => {
             ? user.groups.some(g => ['superadmin', 'manager_admin', 'admin_technique'].includes(g.code))
             : false;
 
-        let { prePage } = req.body;
+        let {  user_ } = req.body;
         const idPharmacies = user.pharmaciesManaged?.map( pharm => pharm._id );
 
-        let pharmacies = idPharmacies ? await Pharmacy.find( {_id : Array.isArray(id) ? {$in : id} : id }) : false;
+        let pharmacies = idPharmacies ? await Pharmacy.find( {_id :  {$in : idPharmacies} }) : false;
         if (!pharmacies && !userInGroupAdmin) { 
             return res.status(404).json({ success: false, message: 'Vous n\'avez pas le droit d\'acceder a ces informations!' });
         }
 
-        let activities = {};
-        if (pharmacies) {
-
-            //sections to check
-            const sections = ['products','catgeories','pharmacies'];
+        let query = {};
+        
+        if (Array.isArray(pharmacies) && pharmacies.length) {
+            const sections = ['products','categories','pharmacies'];
             let ids = [];
-            const idsPharmAuthorized = pharmacies.map(pharm => pharm._id);
-            sections.forEach( async elmt => {
-                let results = [];
+            let results = [];
+            for (const elmt of sections) {
                 switch (elmt) {
-                    case 'products': results = await Product.find({}); break;
-                    case 'catgeories': results = await Category.find({}); break;
-                    case 'pharmacies': results = await Category.find({}); break;
+                    case 'categories': results = await Category.find({ pharmaciesList: { $in: idPharmacies } }); break;
+                    case 'products': results = await Product.find({ pharmaciesList: { $in: idPharmacies } }); break;
+                    case 'pharmacies': results = pharmacies; break;
                     default:break;
                 }
-                ids = ids.concat(results.map(p => p._id));
-            } )
-
-
-            activities = await Activity.find({ id_object: pharmacies.map(pharm => pharm._id) }).sort({ created_at: -1 }).limit(parseInt(prePage) || 10)
-        }else{
-            activities = await Activity.find().sort({ created_at: -1 }).limit(parseInt(prePage) || 10);
+                results.forEach(p => {
+                     if (!ids.includes(p._id)){ ids.push(p._id) }
+                });
+            }
+            if (ids.length) { query.id_object = { $in: ids }; }
         }
+        if (user_ && typeof user_ === 'string') {
+            query.author = user_;
+        } else if (user_ && typeof user_.toString === 'function') {
+            query.author = user_.toString();
+        }
+        const activities = await Activity.find(query).sort({ created_at: -1 });
        
         const validAuthorIds = activities
             ? activities.map(act => act.author).filter(id => mongoose.Types.ObjectId.isValid(id))
@@ -1465,7 +1485,7 @@ const AllPharmacieActivities = async (req, res) => {
                 };
             }
         });
-        return res.status(200).json({'error':0, usersMap: usersMap, data: activities, user: user });
+        return res.status(200).json({'error':0,query, usersMap: usersMap, data: activities, user: user });
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }
@@ -1921,7 +1941,7 @@ const categoriesActivities = async (req, res) => {
             ? user.groups.some(g => ['superadmin', 'manager_admin', 'admin_technique'].includes(g.code))
             : false;
 
-        let { id, prePage } = req.body;
+        let { id, prePage, user_ } = req.body;
         if ( (!id || (Array.isArray(id) && id.length === 0)) && !userInGroupAdmin ) {
             id = user.pharmaciesManaged?.map( pharm => pharm._id );
             if (!id) {  return res.status(400).json({ message: 'Missing required fields'}); }
@@ -2246,7 +2266,7 @@ const productsActivities = async (req, res) => {
             ? user.groups.some(g => ['superadmin', 'manager_admin', 'admin_technique'].includes(g.code))
             : false;
 
-        let { id, prePage } = req.body;
+        let { id, prePage, user_ } = req.body;
         if ((!id || (Array.isArray(id) && id.length === 0)) && !userInGroupAdmin) {
             id = user.pharmaciesManaged?.map(pharm => pharm._id);
             if (!id) {
@@ -2264,9 +2284,10 @@ const productsActivities = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Produit non trouvé' });
         }
 
-        const activities = products
-            ? await Activity.find({ id_object: products.map(prod => prod._id) }).sort({ created_at: -1 }).limit(parseInt(prePage) || 10)
-            : await Activity.find().sort({ created_at: -1 }).limit(parseInt(prePage) || 10);
+        query = {};
+        if (user_) { query.author = user_.toString(); }
+        if (products) { query.id_object = { $in: products.map(c => c._id)}; }
+        const activities = await Activity.find(query).sort({ created_at: -1 }).limit(parseInt(prePage) || 10);
 
         const validAuthorIds = activities
             ? activities.map(act => act.author).filter(id => mongoose.Types.ObjectId.isValid(id))
@@ -3534,4 +3555,4 @@ const loadHistoricMiniChat = async (req, res) => {
     }
 }
 
-module.exports = { authentificateUser, setProfilInfo, loadGeneralsInfo, loadAllActivities, setSettingsFont, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload, pharmacieUpdate, pharmacieDocumentsUpload, pharmacieWorkingsHours, pharmacieActivities, loadHistoricMiniChat, pharmacyCategoriesList, pharmacieCategorieImagesUpload, pharmacyCategoriesCreate, pharmacyCategoryDetail, categoriesActivities, categorieUpdate, categorieDelete, pharmacyCategoriesImport, pharmacyProductsList, pharmacyProductsCreate, productsActivities, uploadProductImages, productsAdvancedSearch, productsStats, productDelete, pharmacyProductsImport, pharmacyProductDetail, productUpdate };
+module.exports = { authentificateUser, setProfilInfo, loadGeneralsInfo, loadAllActivities, setSettingsFont, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload, pharmacieUpdate, pharmacieDocumentsUpload, pharmacieWorkingsHours, pharmacieActivities, loadHistoricMiniChat, pharmacyCategoriesList, pharmacieCategorieImagesUpload, pharmacyCategoriesCreate, pharmacyCategoryDetail, categoriesActivities, categorieUpdate, categorieDelete, pharmacyCategoriesImport, pharmacyProductsList, pharmacyProductsCreate, productsActivities, uploadProductImages, productsAdvancedSearch, productsStats, productDelete, pharmacyProductsImport, pharmacyProductDetail, productUpdate, AllPharmacieActivities };
