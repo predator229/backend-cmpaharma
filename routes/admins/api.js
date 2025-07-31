@@ -4,7 +4,7 @@ const { createAuthMiddleware } = require('@middlewares/auth');
 const {getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse, getUserInfoByEmail, signUpUserWithEmailAndPassword,createUserAndSendEmailLink,deleteUserByEmail, getListCountries} = require('@tools/flutter_tools');
 
 const { verifyFirebaseToken: deliververifyFirebaseToken, injectDeliverType } = createAuthMiddleware('admin');
-const { authentificateUser, setProfilInfo, loadGeneralsInfo, setSettingsFont, loadAllActivities, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload,pharmacieUpdate, pharmacieDocumentsUpload, pharmacieWorkingsHours, pharmacieActivities,loadHistoricMiniChat, pharmacyCategoriesList, pharmacieCategorieImagesUpload, pharmacyCategoriesCreate, pharmacyCategoryDetail, categoriesActivities, categorieUpdate, categorieDelete, pharmacyCategoriesImport, pharmacyProductsList, pharmacyProductsCreate, productsActivities, uploadProductImages, productsAdvancedSearch, productsStats, pharmacyProductsImport, pharmacyProductDetail, productUpdate, productDelete, AllPharmacieActivities, pharmacyUsersList} = require('@controllers/admins/api');
+const { authentificateUser, setProfilInfo, loadGeneralsInfo, setSettingsFont, loadAllActivities, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload,pharmacieUpdate, pharmacieDocumentsUpload, pharmacieWorkingsHours, pharmacieActivities,loadHistoricMiniChat, pharmacyCategoriesList, pharmacieCategorieImagesUpload, pharmacyCategoriesCreate, pharmacyCategoryDetail, categoriesActivities, categorieUpdate, categorieDelete, pharmacyCategoriesImport, pharmacyProductsList, pharmacyProductsCreate, productsActivities, uploadProductImages, productsAdvancedSearch, productsStats, pharmacyProductsImport, pharmacyProductDetail, productUpdate, productDelete, AllPharmacieActivities, pharmacyUsersList, pharmacyPermissionsList} = require('@controllers/admins/api');
 const {checkPharmacyInfo, checkPharmacyOwnerInfo} = require('@controllers/guest/api');
 const upload = require('@middlewares/uploadRoutes');
 
@@ -92,6 +92,10 @@ router.post('/managers/pharmacies/activities', deliververifyFirebaseToken, pharm
     //Routes utilisateurs
     router.post('/pharmacy-management/users/list',deliververifyFirebaseToken, pharmacyUsersList);
 
+
+    router.post('/pharmacy-management/permissions/list',deliververifyFirebaseToken, pharmacyPermissionsList);
+
+    
 //tools
 router.post('/tools/get-countries-list' , getListCountries);
 router.post('/tools/activities', deliververifyFirebaseToken, AllPharmacieActivities);

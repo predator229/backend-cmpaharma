@@ -21,6 +21,7 @@ const ZoneCoordinates = require('@models/ZoneCoordinates');
 const File = require('@models/File');
 const Category = require('@models/Category');
 const Product = require('@models/Product');
+const Permission = require('@models/Permission');
 
 const path = require('path');
 
@@ -3866,6 +3867,27 @@ const pharmacyUsersList = async (req, res) => {
     }
 };
 
+const pharmacyPermissionsList = async (req, res) => {
+    try{
+
+        const { page = 1, limit = 10,search,status,role,pharmacy,sortBy = 'createdAt',sortOrder = 'desc',pharmaciesId,email,name,surname } = req.body;
+
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error) { return res.status(404).json({ message: 'User not found' }); }
+        
+        const user = the_admin.the_user;
+        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        const permissions = await Permission.find({plateform:'Pharmacy'});
+
+        return res.status(200).json({  'error': 0,  success: true, user: user,  permissions: permissions,});
+
+    } catch (error) {
+        console.error('Error in pharmacyPermissionsList:', error);
+        return res.status(500).json({  error: 1, success: false, message: 'Erreur serveur', errorMessage: error.message});
+    }
+}
+
 // Additional endpoint for user creation
 const createPharmacyUser = async (req, res) => {
     try {
@@ -4099,4 +4121,4 @@ const bulkUserActions = async (req, res) => {
 // createPharmacyUser,
 //     bulkUserActions
 
-module.exports = { authentificateUser, setProfilInfo, loadGeneralsInfo, loadAllActivities, setSettingsFont, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload, pharmacieUpdate, pharmacieDocumentsUpload, pharmacieWorkingsHours, pharmacieActivities, loadHistoricMiniChat, pharmacyCategoriesList, pharmacieCategorieImagesUpload, pharmacyCategoriesCreate, pharmacyCategoryDetail, categoriesActivities, categorieUpdate, categorieDelete, pharmacyCategoriesImport, pharmacyProductsList, pharmacyProductsCreate, productsActivities, uploadProductImages, productsAdvancedSearch, productsStats, productDelete, pharmacyProductsImport, pharmacyProductDetail, productUpdate, AllPharmacieActivities, pharmacyUsersList };
+module.exports = { authentificateUser, setProfilInfo, loadGeneralsInfo, loadAllActivities, setSettingsFont, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload, pharmacieUpdate, pharmacieDocumentsUpload, pharmacieWorkingsHours, pharmacieActivities, loadHistoricMiniChat, pharmacyCategoriesList, pharmacieCategorieImagesUpload, pharmacyCategoriesCreate, pharmacyCategoryDetail, categoriesActivities, categorieUpdate, categorieDelete, pharmacyCategoriesImport, pharmacyProductsList, pharmacyProductsCreate, productsActivities, uploadProductImages, productsAdvancedSearch, productsStats, productDelete, pharmacyProductsImport, pharmacyProductDetail, productUpdate, AllPharmacieActivities, pharmacyUsersList, pharmacyPermissionsList };
