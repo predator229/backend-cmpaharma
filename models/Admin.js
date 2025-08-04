@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const adminSchema = new mongoose.Schema({
+  // plateform: { type: String, enum: [ 'pharmacie', 'admin'], required: true, unique: true },
   uids: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Uid' }],
   email: { type: String, required: false, unique: false },
   name: { type: String, required: false },
@@ -9,7 +10,7 @@ const adminSchema = new mongoose.Schema({
   photoURL: { type: String, required: false },
   disabled: { type: Boolean, default: false },
   country: { type: mongoose.Schema.Types.ObjectId, ref: 'Country', required: false },
-  city: { type: mongoose.Schema.Types.ObjectId, ref: 'City', required: false },
+  city: { type: String, required: false },
   address: { type: String, required: false },
   mobils: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Mobil' }],
   phone: { type: mongoose.Schema.Types.ObjectId, ref: 'Mobil' },

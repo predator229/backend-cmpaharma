@@ -1,5 +1,43 @@
 [
   {
+    "module": "livraisons",
+    "label": "Gestion des livraisons",
+    "plateform": "Pharmacy",
+    "permissions": [
+      "livraisons.view",
+      "livraisons.assign_livreur",
+      "livraisons.tracking",
+      "livraisons.cancel",
+      "livraisons.update_status",
+      "livraisons.export",
+      "livraisons.history"
+    ]
+  },
+  {
+    "module": "zones_livraison",
+    "label": "Zones de livraison",
+    "plateform": "Pharmacy",
+    "permissions": [
+      "zones.view",
+      "zones.create",
+      "zones.edit",
+      "zones.tarifs",
+      "zones.delais",
+      "zones.disponibilite"
+    ]
+  },
+  {
+    "module": "tracking",
+    "label": "Suivi en temps réel",
+    "plateform": "Pharmacy",
+    "permissions": [
+      "tracking.view_realtime",
+      "tracking.map_view",
+      "tracking.eta_calculation",
+      "tracking.notifications_client"
+    ]
+  },
+  {
     "module": "dashboard",
     "label": "Dashboard - Vue principale",
     "plateform": "Pharmacy",
@@ -116,35 +154,6 @@
     ]
   },
   {
-    "module": "achats",
-    "label": "Gestion des achats",
-    "plateform": "Pharmacy",
-    "description": "Consultation, ajout de stock, retours, impression et export",
-    "createdBy": "System",
-    "permissions": [
-      "achats.view",
-      "achats.ajout_stock",
-      "achats.retour",
-      "achats.export",
-      "achats.print"
-    ]
-  },
-  {
-    "module": "attributs",
-    "label": "Gestion des attributs",
-    "plateform": "Pharmacy",
-    "description": "CRUD, export et impression des attributs produits",
-    "createdBy": "System",
-    "permissions": [
-      "attributs.view",
-      "attributs.create",
-      "attributs.edit",
-      "attributs.delete",
-      "attributs.export",
-      "attributs.print"
-    ]
-  },
-  {
     "module": "factures",
     "label": "Gestion des factures",
     "plateform": "Pharmacy",
@@ -189,6 +198,36 @@
       "utilisateurs.roles",
       "utilisateurs.suspend",
       "utilisateurs.export"
+    ]
+  },
+  {
+    "module": "permissions",
+    "label": "Gestion des Permisions",
+    "plateform": "Pharmacy",
+    "description": "CRUD, export et impression des permissions",
+    "createdBy": "System",
+    "permissions": [
+      "permissions.view",
+      "permissions.create",
+      "permissions.edit",
+      "permissions.delete",
+      "permissions.export",
+      "permissions.print"
+    ]
+  },
+    {
+    "module": "groupes",
+    "label": "Gestion des Groupes",
+    "plateform": "Pharmacy",
+    "description": "CRUD, export et impression des groupe",
+    "createdBy": "System",
+    "permissions": [
+      "groups.view",
+      "groups.create",
+      "groups.edit",
+      "groups.delete",
+      "groups.export",
+      "groups.print"
     ]
   },
   {
@@ -275,6 +314,29 @@
     ]
   },
   {
+    "module": "assignation_intelligente",
+    "label": "Assignation automatique",
+    "plateform": "Admin",
+    "permissions": [
+      "assignation.algorithme_config",
+      "assignation.criteres_priorite",
+      "assignation.override_manual",
+      "assignation.analytics"
+    ]
+  },
+  {
+    "module": "incidents_livraison",
+    "label": "Incidents de livraison",
+    "plateform": "Admin",
+    "permissions": [
+      "incidents.view",
+      "incidents.create",
+      "incidents.assign_support",
+      "incidents.resolution",
+      "incidents.compensation"
+    ]
+  },
+  {
     "module": "dashboard_admin",
     "label": "Dashboard - Vue Admin",
     "plateform": "Admin",
@@ -317,7 +379,10 @@
       "livreurs.history",
       "livreurs.assign",
       "livreurs.statut",
-      "livreurs.export"
+      "livreurs.export",
+      "livreurs.geolocation",
+      "livreurs.performance_metrics",
+      "livreurs.disponibilite_temps_reel"
     ]
   },
   {

@@ -1,7 +1,7 @@
 require('module-alias/register');
 require('dotenv').config();
 
-const {getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse,registerActivity } = require('@tools/flutter_tools');
+const {getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse,registerActivity, loadAllPermissions, getUserInfoByEmail, createUserAndSendEmailLink } = require('@tools/flutter_tools');
 const LocationBoundsService = require('@tools/LocationBoundsService');
 
 const { parsePhoneNumberFromString } = require('libphonenumber-js');
@@ -33,6 +33,7 @@ const mongoose = require('mongoose');
 const fs = require('fs');
 
 const nodemailer = require('nodemailer');
+const { query } = require('express');
 
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com', 
@@ -3832,19 +3833,42 @@ const pharmacyUsersList = async (req, res) => {
               })) 
             : [];
 
+        let pharmsFullInfos = [];
+        if (user?.groups?.some(g => ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].includes(g.code))) {
+            const pharmacyIds = user.pharmaciesManaged?.map(pharm => pharm._id) || [];
+
+            pharmsFullInfos = await Pharmacy.find({ _id: { $in: pharmacyIds } }).populate([
+                { path: 'location' },
+                { path: 'country' },
+                { path: 'workingHours' },
+                {
+                    path: 'deliveryZone',
+                    populate: {
+                        path: 'coordinates',
+                        populate: { path: 'points' },
+                    },
+                },
+                {
+                    path: 'documents',
+                    populate: [
+                        { path: 'logo' },
+                        { path: 'license' },
+                        { path: 'idDocument' },
+                        { path: 'insurance' },
+                    ],
+                },
+            ]);
+        }
+
         const groups = await Group.find({ 
-            code: { $in: ['support_admin', 'manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'] },
+            code: { $in: ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'] },
             isActive: true
         })
         .populate('permissions')
-        .select('name code description isActive permissions')
+        .select('name code description isActive permissions plateform')
         .lean();
 
-        return res.status(200).json({ 
-            'error': 0, 
-            success: true,
-            user: user, 
-            data: {
+        return res.status(200).json({  'error': 0,  success: true, user: user,  data: {
                 users: users,
                 total: totalUsers,
                 page: pageNum,
@@ -3852,13 +3876,318 @@ const pharmacyUsersList = async (req, res) => {
                 totalPages: totalPages,
                 hasNextPage: pageNum < totalPages,
                 hasPrevPage: pageNum > 1
-            },
-            pharmaciesList,
-            groups,
-            filters: { status, role, pharmacy, search },
-            sorting: { sortBy: sortField, sortOrder
+            },pharmaciesList,pharmsFullInfos,groups,filters: { status, role, pharmacy, search },sorting: { sortBy: sortField, sortOrder
             }
         });
+
+    } catch (error) {
+        console.error('Error in pharmacyUsersList:', error);
+        return res.status(500).json({  error: 1, success: false, message: 'Erreur serveur', errorMessage: error.message
+        });
+    }
+};
+const pharmacyUsersDetail = async (req, res) => {
+    try {
+        const { userId } = req.body;
+
+        if (!userId) {
+            return res.status(200).json({  error: 1, success: false, message: 'Erreur de paramètres', errorMessage: 'Invalid Id' });
+        }
+
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error) { return res.status(404).json({ message: 'User not found' }); }
+        
+        const user = the_admin.the_user;
+        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        let query = {};
+        
+        let pharmaciesManaged = user?.groups?.some(g => [ 'manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].includes(g.code))
+                    ? user.pharmaciesManaged.map(pharm => pharm._id)
+                    : [];;
+
+        if (pharmaciesManaged && pharmaciesManaged.length > 0) {
+            query.pharmaciesManaged = { $in: pharmaciesManaged };
+        } else if (pharmaciesManaged !== null && pharmaciesManaged?.length === 0) {
+            return res.status(200).json({ 
+                'error': 1, 
+                success: false, 
+                message: 'Vous n\'avez aucune pharmacie !', 
+                errorMessage: 'Vous n\'avez aucune pharmacie !',
+            });
+        }
+
+        query._id = userId;
+
+        let users = await Admin.findOne(query)
+            .populate([
+                {  path: 'country', select: 'name code dialCode flag' },
+                {  path: 'pharmaciesManaged',},
+                { path: 'phone', },
+                {  path: 'mobils'},
+                {  path: 'setups', },
+                { 
+                    path: 'groups', 
+                    populate: { path: 'permissions' }
+                }
+            ]);
+
+        const pharmaciesList = user?.groups?.some(g => ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].includes(g.code)) 
+            ? user.pharmaciesManaged.map(pharm => ({ 
+                value: pharm._id, 
+                label: pharm.name 
+              })) 
+            : [];
+
+        let pharmsFullInfos = [];
+        if (user?.groups?.some(g => ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].includes(g.code))) {
+            const pharmacyIds = user.pharmaciesManaged?.map(pharm => pharm._id) || [];
+
+            pharmsFullInfos = await Pharmacy.find({ _id: { $in: pharmacyIds } }).populate([
+                { path: 'location' },
+                { path: 'country' },
+                { path: 'workingHours' },
+                {
+                    path: 'deliveryZone',
+                    populate: {
+                        path: 'coordinates',
+                        populate: { path: 'points' },
+                    },
+                },
+                {
+                    path: 'documents',
+                    populate: [
+                        { path: 'logo' },
+                        { path: 'license' },
+                        { path: 'idDocument' },
+                        { path: 'insurance' },
+                    ],
+                },
+            ]);
+        }
+
+        let permissionIds = user?.groups.flatMap(group => 
+            Array.isArray(group.permissions)
+                ? group.permissions.map(p => p._id)
+                : [group.permissions?._id]
+        );
+
+        // Supprimer les doublons si nécessaire
+        permissionIds = [...new Set(permissionIds.map(id => id.toString()))];
+
+        // Rechercher les permissions spécifiques à la plateforme "Pharmacy"
+        const permissions = await Permission.find({ 
+            plateform: 'Pharmacy', 
+            _id: { $in: permissionIds } 
+        }).lean();
+
+        // const groups = await Group.find({ 
+        //     _id: { $in: user?.groups.map(g => g._id) } 
+        // }).populate('permissions').lean();
+
+        return res.status(200).json({  'error': 0,  success: true, user: user,  data: {
+                user: users,
+                permissions,
+                countries: await Country.find(),
+            },
+            pharmaciesList, pharmsFullInfos
+        });
+
+    } catch (error) {
+        console.error('Error in pharmacyUsersList:', error);
+        return res.status(500).json({  error: 1, success: false, message: 'Erreur serveur', errorMessage: error.message
+        });
+    }
+};
+const pharmacyUsersCreate = async (req, res) => {
+    try {
+
+        const { name, surname, email, phone, address, groups, pharmaciesManaged, sendWelcomeEmail = true, isActivated = true } = req.body;
+        if (!name || !surname || !email || !pharmaciesManaged || !groups) {
+            return res.status(200).json({
+                error: 1,
+                success: false,
+                message: 'Certains paramètres sont manquants',
+                errorMessage: 'Certains paramètres sont manquants'
+            });
+        }
+
+        const the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        const user = the_admin.the_user;
+        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        // Liste des pharmacies que le user a le droit de gérer
+        let userPharmacyIds = user?.groups?.some(g =>
+            ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].includes(g.code)
+        ) ? user?.pharmaciesManaged?.map(pharm => pharm._id.toString()) || [] : [];
+
+        // Vérification et filtrage des pharmacies demandées
+        let pharmaciesManagedFiltered = [];
+        if (pharmaciesManaged) {
+            const requestedPharmacies = Array.isArray(pharmaciesManaged)
+                ? pharmaciesManaged
+                : [pharmaciesManaged];
+
+            pharmaciesManagedFiltered = requestedPharmacies.filter(pharmId =>
+                userPharmacyIds.includes(pharmId)
+            );
+        }
+
+        // Vérification finale : si aucune pharmacie autorisée
+        if (!pharmaciesManagedFiltered.length) {
+            return res.status(200).json({
+                error: 1,
+                success: false,
+                message: 'Vous n\'avez aucune pharmacie !',
+                errorMessage: 'Vous n\'avez aucune pharmacie !',
+            });
+        }
+        let query = {};
+        query.pharmaciesManaged = pharmaciesManagedFiltered;
+
+        const userPermissions = await loadAllPermissions(user, req, res);
+        if (!userPermissions.permissions?.includes('utilisateurs.create')) {
+            return res.status(200).json({ error: 1, success: false, message: 'Vous n\'avez pas les permissions nécessaires', errorMessage: 'Vous n\'avez pas les permissions nécessaires' });
+        }
+
+        query.email = new RegExp(email, 'i');
+        query.name = new RegExp(name, 'i'); 
+        query.surname = new RegExp(surname, 'i');
+
+        // Check if email already exists
+        const existingUser = await Admin.find(query);
+        if (existingUser.length > 0) {
+            return res.status(400).json({ error: 1, success: false, message: 'Un utilisateur avec ces informations existe deja !', errorMessage: 'Un utilisateur avec ces informations existe deja !'});
+        }
+
+        // Validate groups
+        const validGroups = await Group.find({
+            _id: { $in: groups },
+            code: { $in: ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'] }
+        });
+
+        if (validGroups.length !== groups.length) {
+            return res.status(400).json({ error: 1, success: false, message: 'Groupes invalides', errorMessage: 'Un ou plusieurs groupes sélectionnés sont invalides' });
+        }
+        query.groups = validGroups.map(g => g._id);
+        let uuidObj = null;
+
+        let firebaseRezult = await getUserInfoByEmail(email, req.body.type);
+        if (firebaseRezult.status === 200 && firebaseRezult.user) { 
+            const existUid = await Uid({ uid: firebaseRezult.user.uid });
+            if (existUid) {
+                return res.status(200).json({ error: 0, success: false, errorMessage: 'L\'email du propriétaire du compte n\'est pas associé à un compte existant.' });
+            }
+        }
+        if (firebaseRezult.status == 200 && firebaseRezult.user) { 
+            uuidObj = new Uid({ uid: firebaseRezult.user.uid });
+        }
+        if (firebaseRezult.status !== 200){
+            const resultCreatedUser = await createUserAndSendEmailLink(email, req.body.type, process.env.FRONT_BASE_LINK+'/login');
+            if (resultCreatedUser.status != 200) {
+                return res.status(200).json({ error: 1, message: resultCreatedUser.error ?? 'Erreur lors de la création du compte.', errorMessage: resultCreatedUser.error ?? 'Erreur lors de la création du compte.' });
+            }
+            firebaseRezult = await getUserInfoByEmail(email, req.body.type,);
+            if (firebaseRezult.status !== 200) {
+                return res.status(200).json({ error: 1, success: false, continue: false, errorMessage: 'Erreur lors de la création du compte. Veuillez réessayer.'});
+            }
+            uuidObj = new Uid({ uid: firebaseRezult.user.uid });
+        }
+
+        if (uuidObj !== null) { await uuidObj.save(); }
+        else{
+            return res.status(200).json({ error: 1, success: false, message: 'Erreur creation de compte flutter!', errorMessage: 'Erreur creation de compte flutter!'});
+        }
+        query.uid = [uuidObj._id];
+
+        if (address) { query.address = address;}
+
+        const phoneNumber = phone ? parsePhoneNumberFromString(phone) : false;
+        if (phoneNumber){
+            country = await Country.findOne({ code: phoneNumber.country });
+            if (country){
+                query.country = country._id;
+               const userPhone = new Mobil({
+                    digits: phoneNumber.nationalNumber,
+                    indicatif: country.dial_code,
+                    title: phoneNumber.nationalNumber,
+                });
+                await userPhone.save();
+                query.phone = userPhone._id;
+                query.mobils = [userPhone._id];
+            }
+        }
+        const setups_base = new SetupBase({
+            font_family: 'Poppins',
+            font_size: 14,
+            theme: 'light',
+            isCollapse_menu: true,
+        });
+        await setups_base.save();
+        setups_base.id = setups_base._id;
+        await setups_base.save();
+        query.setups =setups_base._id;
+
+        // Create new user
+        query.isActivated = isActivated ?? false;
+        const newUser = new Admin(query);
+        await newUser.save();
+
+        const populatedUser = await Admin.findById(newUser._id)
+            .populate([
+                {  path: 'country', select: 'name code dialCode flag' },
+                { 
+                    path: 'pharmaciesManaged',
+                    select: 'name address phoneNumber email licenseNumber isActive',
+                    populate: [ { path: 'city', select: 'name' }, { path: 'country', select: 'name' } ]
+                },
+                { path: 'phone', },
+                { 
+                    path: 'mobils',
+                    select: 'number isVerified type isPrimary',
+                    populate: { path: 'country', select: 'name dialCode' }
+                },
+                { 
+                    path: 'setups',
+                    select: 'theme language timezone dateFormat currency notifications'
+                },
+                { 
+                    path: 'groups', 
+                    select: 'name code description isActive',
+                    populate: { path: 'permissions', select: 'name code description' }
+                }
+            ])
+        await registerActivity('Nouvel utilisateur', newUser._id, user._id, "Un nouvel utilisateur a ete ajoute", `L'utulisateur : ${newUser.name}  ${newUser.name} a etee ajoute par ${user.name} ${user.name}`);
+        await registerActivity('Genaral Settings', setups_base._id, user._id,  "Nouveau parametres generals ajoute", "Des parametres generaux de utilisateur ont ete crees");
+
+        if (sendWelcomeEmail) {
+            const htmlContent = `
+                <div style="font-family: Arial, sans-serif; padding: 20px;">
+                    <h2>Bienvenue sur <span style="color:#1976d2;">CTMPHARMA</span> !</h2>
+                    <p>Bonjour ${newUser.name || ''} ${newUser.surname || ''},</p>
+                    <p>Nous sommes ravis de vous compter parmi nous.</p>
+                    <p>Vous pouvez dès à présent accéder à votre espace personnel pour gérer vos activités.</p>
+                    <p>Si vous avez des questions, n’hésitez pas à nous contacter à <a href="mailto:${process.env.MAIL_USER}">${process.env.MAIL_USER}</a>.</p>
+                    <br>
+                    <p>À très bientôt,</p>
+                    <p>L’équipe CTMPHARMA</p>
+                </div>
+            `;
+
+            await transporter.sendMail({
+                from: `"Support CTMPHARMA" <${process.env.MAIL_USER}>`,
+                to: email,
+                subject: 'Bienvenue sur CTMPHARMA',
+                html: htmlContent,
+            });
+            await registerActivity('Envoie Email', newUser._id, user._id,  "Un email de bienvenue a ete envoyé", `Un email de bienvenue a ete envoyé au nouvel utilisateur : ${newUser.name}  ${newUser.name}!`);
+        }
+
+        return res.status(201).json({ error: 0, success: true, message: 'Utilisateur créé avec succès', data: populatedUser});
 
     } catch (error) {
         console.error('Error in pharmacyUsersList:', error);
@@ -3887,134 +4216,534 @@ const pharmacyPermissionsList = async (req, res) => {
         return res.status(500).json({  error: 1, success: false, message: 'Erreur serveur', errorMessage: error.message});
     }
 }
-
-// Additional endpoint for user creation
-const createPharmacyUser = async (req, res) => {
-    try {
-        const {
-            name,
-            surname,
-            email,
-            phone,
-            country,
-            city,
-            address,
-            groups = [],
-            pharmaciesManaged = [],
-            sendWelcomeEmail = true,
-            isActivated = true
-        } = req.body;
+const pharmacyGroupsList = async (req, res) => {
+    try{
+        const { page = 1, limit = 10,search,isActive,name,pharmacy,sortBy = 'createdAt',sortOrder = 'desc',pharmaciesId, code, description, idUser } = req.body;
 
         var the_admin = await getTheCurrentUserOrFailed(req, res);
-        if (the_admin.error) {
-            return res.status(404).json({ message: 'User not found' });
-        }
+        if (the_admin.error) { return res.status(404).json({ message: 'User not found' }); }
+        
+        const user = the_admin.the_user;
+        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
 
-        const currentUser = the_admin.the_user;
+        let query = {};
+        
+        let pharmaciesManaged = user?.groups?.some(g => [ 'manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].includes(g.code))
+                    ? user.pharmaciesManaged.map(pharm => pharm._id)
+                    : [];
+        if (pharmacy && pharmaciesManaged.includes(pharmacy)) {
+            pharmaciesManaged = [pharmacy];
+        } else if (pharmaciesId) {
+            pharmaciesManaged = (Array.isArray(pharmaciesId) ? pharmaciesId : [pharmaciesId]).map(phamr => pharmaciesManaged.includes(phamr) ? phamr : null).filter(Boolean);
+        }     
 
-        // Check permissions
-        const canCreateUsers = currentUser?.groups?.some(g => ['manager_pharmacy'].includes(g.code)) ||
-                              currentUser.hasPermission?.('users.create');
-
-        if (!canCreateUsers) {
-            return res.status(403).json({
-                error: 1,
-                success: false,
-                message: 'Permissions insuffisantes',
-                errorMessage: 'Vous n\'avez pas les permissions pour créer des utilisateurs'
+        if (pharmaciesManaged && pharmaciesManaged.length > 0) {
+            query.pharmaciesManaged = { $in: pharmaciesManaged };
+        } else if (pharmaciesManaged !== null && pharmaciesManaged?.length === 0) {
+            return res.status(200).json({ 
+                'error': 1, 
+                success: false, 
+                message: 'Vous n\'avez aucune pharmacie !', 
+                errorMessage: 'Vous n\'avez aucune pharmacie !',
             });
         }
 
-        // Check if email already exists
-        const existingUser = await Admin.findOne({ email: email.toLowerCase() });
-        if (existingUser) {
-            return res.status(400).json({
-                error: 1,
-                success: false,
-                message: 'Email déjà utilisé',
-                errorMessage: 'Un utilisateur avec cet email existe déjà'
-            });
+        if (idUser) {
+            const theFilteredUser = await Admin.findOne({ _id: idUser });
+            // if (!theFilteredUser || !theFilteredUser.pharmaciesManaged || !theFilteredUser.pharmaciesManaged.length || ! pharmaciesManaged.some(pharmacy =>theFilteredUser.pharmaciesManaged.includes(pharmacy) ) ){
+            //     return res.status(404).json({ error: 1, success: false, message: 'L\'utilisateur n\'appartient pas a la pharmacie selectionnée ou a votre groupe de pharmacies' });
+            // }
+            query._id = {$in :  theFilteredUser.groups};
         }
 
-        // Validate groups
-        const validGroups = await Group.find({
-            _id: { $in: groups },
-            code: { $in: ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'] }
-        });
+        // Status filter
+        if (isActive) {
+            query.isActivated = isActive;
+        } 
 
-        if (validGroups.length !== groups.length) {
-            return res.status(400).json({
-                error: 1,
-                success: false,
-                message: 'Groupes invalides',
-                errorMessage: 'Un ou plusieurs groupes sélectionnés sont invalides'
-            });
+        if (search) {
+            const cleanedSearch = search.replace(/\s+/g, '').trim();
+            const regex = new RegExp(cleanedSearch, 'i');
+            query.$or = [
+                { name: regex },
+                { code: regex },
+                { description: regex },
+            ];
         }
 
-        // Create phone object if provided
-        let phoneObject = null;
-        if (phone && country) {
-            phoneObject = new Mobil({
-                number: phone,
-                country: country,
-                type: 'mobile',
-                isPrimary: true
-            });
-            await phoneObject.save();
+        if (name) { query.name = new RegExp(name, 'i'); }
+        if (code) { 
+            query.code = [ 'manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].includes(code) ? new RegExp(code, 'i') : { $in : []} ; 
+        }else{
+            query.code= { $in : [ 'manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant']};
         }
+        if (description) { query.description = new RegExp(description, 'i'); }
 
-        // Create new user
-        const newUser = new Admin({
-            name,
-            surname,
-            email: email.toLowerCase(),
-            country,
-            city,
-            address,
-            phone: phoneObject?._id,
-            mobils: phoneObject ? [phoneObject._id] : [],
-            groups: validGroups.map(g => g._id),
-            pharmaciesManaged,
-            isActivated,
-            disabled: false,
-            setups: new SetupBase({})
-        });
+        let sortObject = {};
+        const validSortFields = ['code', 'name', 'description', 'createdAt', 'updatedAt'];
+        const sortField = validSortFields.includes(sortBy) ? sortBy : 'createdAt';
+        const sortDirection = sortOrder === 'asc' ? 1 : -1;
+        sortObject[sortField] = sortDirection;
 
-        await newUser.save();
-
-        // Populate the new user for response
-        const populatedUser = await Admin.findById(newUser._id)
-            .populate([
-                { path: 'country', select: 'name code dialCode flag' },
-                { path: 'city', select: 'name postalCode' },
-                { path: 'pharmaciesManaged', select: 'name address phoneNumber' },
-                { path: 'phone', select: 'number type' },
-                { path: 'groups', select: 'name code description' }
-            ]);
-
-        // Send welcome email if requested
-        if (sendWelcomeEmail) {
-            // TODO: Implement email sending logic
-            console.log(`Welcome email should be sent to ${email}`);
-        }
-
-        return res.status(201).json({
-            error: 0,
-            success: true,
-            message: 'Utilisateur créé avec succès',
-            data: populatedUser
-        });
-
-    } catch (error) {
-        console.error('Error in createPharmacyUser:', error);
-        return res.status(500).json({
-            error: 1,
-            success: false,
-            message: 'Erreur serveur',
-            errorMessage: error.message
+        const groups = await Group.find(query).sort(sortObject).skip((page - 1) * limit).limit(limit);
+        // let users = await Admin.find(query)
+        return  res.status(200).json({  'error': 0,  success: true, user: user,  data: groups,});
+    }catch (error) {
+        console.error('Error in pharmacyUsersList:', error);
+        return res.status(500).json({  error: 1, success: false, message: 'Erreur serveur', errorMessage: error.message
         });
     }
-};
+}
+
+const pharmacyGroupsJoin = async (req, res) => {
+    try{
+        const { id } = req.body;
+
+        if (!id) {
+            return res.status(404).json({ error: 1, success: false, message: 'Invalid grouop id', errorMessage: 'Le groupe n\'existe pas !' });
+        }
+
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error) { return res.status(404).json({ message: 'User not found' }); }
+        
+        const user = the_admin.the_user;
+        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        
+        let pharmaciesManaged = user?.groups?.some(g => [ 'manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].includes(g.code))
+                    ? user.pharmaciesManaged.map(pharm => pharm._id)
+                    : [];
+
+        if (!pharmaciesManaged && pharmaciesManaged.length <= 0) {
+            return res.status(200).json({ 
+                'error': 1, 
+                success: false, 
+                message: 'Vous n\'avez aucune pharmacie !', 
+                errorMessage: 'Vous n\'avez aucune pharmacie !',
+            });
+        }
+        const userPermissions = await loadAllPermissions(user, req, res);
+        if (!userPermissions.permissions?.includes('groups.edit')) {
+            return res.status(200).json({ error: 1, success: false, message: 'Vous n\'avez pas les permissions nécessaires', errorMessage: 'Vous n\'avez pas les permissions nécessaires' });
+        }
+
+        let query = {};
+        query._id = id;
+        query.code = { $in: ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'] };
+
+        const group = await Group.find(query);
+        if (!group) {
+            return res.status(404).json({ error: 1, success: false, message: 'Le groupe n\'existe pas !', errorMessage: 'Le groupe n\'existe pas !' });
+        }
+        if (!user.groups?.some(grouppp => grouppp._id.toString() == group[0]._id.toString()) ) {
+            const toSave = await Admin.findById(user._id);
+            toSave.groups.push(group[0]._id);
+            await toSave.save();
+        }else{
+            return res.status(200).json({ error: 1, success: false, message: 'Vous avez déjà rejoins ce groupe !', errorMessage: 'Vous avez déjà rejoins ce groupe !' });
+        }
+        await registerActivity('Groupes', group[0]._id, user._id,  "L'utilisateur a ete rejoint le groupe "+group[0].name+" : "+user.name );
+
+        return res.status(200).json({  'error': 0,  success: true, user: user, message: 'Vous avez rejoint le groupe !', errorMessage: 'Vous avez rejoint le groupe !'});
+    }catch (error) {
+        console.error('Error in pharmacyUsersList:', error);
+        return res.status(500).json({  error: 1, success: false, message: 'Erreur serveur', errorMessage: error.message
+        });
+    }
+}
+
+const pharmacyGroupsLeave = async (req, res) => {
+    try{
+        const { id } = req.body;
+
+        if (!id) {
+            return res.status(404).json({ error: 1, success: false, message: 'Invalid grouop id', errorMessage: 'Le groupe n\'existe pas !' });
+        }
+
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error) { return res.status(404).json({ message: 'User not found' }); }
+        
+        const user = the_admin.the_user;
+        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        
+        let pharmaciesManaged = user?.groups?.some(g => [ 'manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].includes(g.code))
+                    ? user.pharmaciesManaged.map(pharm => pharm._id)
+                    : [];
+
+        if (!pharmaciesManaged && pharmaciesManaged.length <= 0) {
+            return res.status(200).json({ 
+                'error': 1, 
+                success: false, 
+                message: 'Vous n\'avez aucune pharmacie !', 
+                errorMessage: 'Vous n\'avez aucune pharmacie !',
+            });
+        }
+        const userPermissions = await loadAllPermissions(user, req, res);
+        if (!userPermissions.permissions?.includes('groups.edit')) {
+            return res.status(200).json({ error: 1, success: false, message: 'Vous n\'avez pas les permissions nécessaires', errorMessage: 'Vous n\'avez pas les permissions nécessaires' });
+        }
+
+        let query = {};
+        query._id = id;
+        query.code = { $in: ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'] };
+
+        const group = await Group.find(query);
+        if (!group) {
+            return res.status(404).json({ error: 1, success: false, message: 'Le groupe n\'existe pas !', errorMessage: 'Le groupe n\'existe pas !' });
+        }
+        if (user.groups?.some(grouppp => grouppp._id.toString() == group[0]._id.toString()) ) {
+            const toSave = await Admin.findById(user._id);
+            toSave.groups.pull(group[0]._id);
+            await toSave.save();
+        }else{
+            return res.status(200).json({ error: 1, success: false, test: user.groups.map(g => g._id), tosearch: group[0]._id,  message: 'Vous n\'etes pas membre de ce groupe !', errorMessage: 'Vous n\'etes pas membre de ce groupe !' });
+        }
+        await registerActivity('Groupes', group[0]._id, user._id,  "L'utilisateur a ete quitte le groupe "+group[0].name+" : "+user.name );
+
+        return res.status(200).json({  'error': 0,  success: true, user: user, message: 'Vous avez quitte le groupe avec succes !', errorMessage: 'Vous avez quitte le groupe avec succes !'});
+    }catch (error) {
+        console.error('Error in pharmacyUsersList:', error);
+        return res.status(500).json({  error: 1, success: false, message: 'Erreur serveur', errorMessage: error.message
+        });
+    }
+}
+const pharmacyGroupsgetMembers = async (req, res) => {
+    try{
+        const { id } = req.body;
+
+        if (!id) {
+            return res.status(404).json({ error: 1, success: false, message: 'Invalid group id', errorMessage: 'Le groupe n\'existe pas !' });
+        }
+
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error) { return res.status(404).json({ message: 'User not found' }); }
+        
+        const user = the_admin.the_user;
+        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+        
+        let pharmaciesManaged = user?.groups?.some(g => [ 'manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].includes(g.code))
+                    ? user.pharmaciesManaged.map(pharm => pharm._id)
+                    : [];
+
+        if (!pharmaciesManaged && pharmaciesManaged.length <= 0) {
+            return res.status(200).json({ 
+                'error': 1, 
+                success: false, 
+                message: 'Vous n\'avez aucune pharmacie !', 
+                errorMessage: 'Vous n\'avez aucune pharmacie !',
+            });
+        }
+        const userPermissions = await loadAllPermissions(user, req, res);
+        if (!userPermissions.permissions?.includes('groups.edit')) {
+            return res.status(200).json({ error: 1, success: false, message: 'Vous n\'avez pas les permissions nécessaires', errorMessage: 'Vous n\'avez pas les permissions nécessaires' });
+        }
+
+        let query = {};
+        query._id = id;
+        query.code = { $in: ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'] };
+
+        const group = await Group.find(query);
+        if (!group) {
+            return res.status(404).json({ error: 1, success: false, message: 'Le groupe n\'existe pas !', errorMessage: 'Le groupe n\'existe pas !' });
+        }
+        const members = await Admin.find({ 
+                groups: { $in : [group[0]._id] }, 
+                pharmaciesManaged: { $in: pharmaciesManaged } 
+            }).populate([
+                { path: 'country' },
+                { path: 'phone' },
+                { path: 'mobils' },
+                { path: 'setups' },
+                {path: 'pharmaciesManaged'},
+                { path: 'groups', populate: [
+                    { path: 'permissions' }
+                ]}
+            ]);
+        
+        return res.status(200).json({'error': 0, members: members, success: true, user: user});
+    }catch (error) {
+        console.error('Error in pharmacyUsersList:', error);
+        return res.status(500).json({  error: 1, success: false, message: 'Erreur serveur', errorMessage: error.message
+        });
+    }
+}
+const pharmacyGroupsgetAvailableUsers = async (req, res) => {
+    try{
+        const { groupId } = req.body;
+        if (!groupId) {
+            return res.status(404).json({ error: 1, success: false, message: 'Invalid group id', errorMessage: 'Le groupe n\'existe pas !' });
+        }
+
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error) { return res.status(404).json({ message: 'User not found' }); }
+        
+        const user = the_admin.the_user;
+        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+        
+        let pharmaciesManaged = user?.groups?.some(g => [ 'manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].includes(g.code))
+                    ? user.pharmaciesManaged.map(pharm => pharm._id)
+                    : [];
+
+        if (!pharmaciesManaged && pharmaciesManaged.length <= 0) {
+            return res.status(200).json({ 
+                'error': 1, 
+                success: false, 
+                message: 'Vous n\'avez aucune pharmacie !', 
+                errorMessage: 'Vous n\'avez aucune pharmacie !',
+            });
+        }
+        const userPermissions = await loadAllPermissions(user, req, res);
+        if (!userPermissions.permissions?.includes('groups.edit')) {
+            return res.status(200).json({ error: 1, success: false, message: 'Vous n\'avez pas les permissions nécessaires', errorMessage: 'Vous n\'avez pas les permissions nécessaires' });
+        }
+
+        let query = {};
+        query._id = groupId;
+        query.code = { $in: ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'] };
+
+        const group = await Group.find(query);
+        if (!group) {
+            return res.status(404).json({ error: 1, success: false, message: 'Le groupe n\'existe pas !', errorMessage: 'Le groupe n\'existe pas !' });
+        }
+        const members = await Admin.find({ 
+                groups: { $nin : [group[0]._id] }, 
+                pharmaciesManaged: { $in: pharmaciesManaged } 
+            }).populate([
+                { path: 'country' },
+                { path: 'phone' },
+                { path: 'mobils' },
+                { path: 'setups' },
+                {path: 'pharmaciesManaged'},
+                { path: 'groups', populate: [
+                    { path: 'permissions' }
+                ]}
+            ]);
+        
+        return res.status(200).json({'error': 0, members: members, success: true, user: user});
+    }catch (error) {
+        console.error('Error in pharmacyUsersList:', error);
+        return res.status(500).json({  error: 1, success: false, message: 'Erreur serveur', errorMessage: error.message
+        });
+    }
+}
+const pharmacyGroupsaddMembers = async (req, res) => {
+    try{
+        let { groupId, userIds } = req.body;
+
+        if (!groupId || !userIds) {
+            return res.status(404).json({ error: 1, success: false, message: 'Invalid group id', errorMessage: 'Le groupe n\'existe pas !' });
+        }
+
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error) { return res.status(404).json({ message: 'User not found' }); }
+        
+        const user = the_admin.the_user;
+        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+        
+        let pharmaciesManaged = user?.groups?.some(g => [ 'manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].includes(g.code))
+                    ? user.pharmaciesManaged.map(pharm => pharm._id)
+                    : [];
+
+        if (!pharmaciesManaged && pharmaciesManaged.length <= 0) {
+            return res.status(200).json({ 
+                'error': 1, 
+                success: false, 
+                message: 'Vous n\'avez aucune pharmacie !', 
+                errorMessage: 'Vous n\'avez aucune pharmacie !',
+            });
+        }
+        const userPermissions = await loadAllPermissions(user, req, res);
+        if (!userPermissions.permissions?.includes('groups.edit')) {
+            return res.status(200).json({ error: 1, success: false, message: 'Vous n\'avez pas les permissions nécessaires', errorMessage: 'Vous n\'avez pas les permissions nécessaires' });
+        }
+
+        let query = {};
+        query._id = groupId;
+        query.code = { $in: ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'] };
+
+        const group = await Group.find(query);
+        if (!group) {
+            return res.status(404).json({ error: 1, success: false, message: 'Le groupe n\'existe pas !', errorMessage: 'Le groupe n\'existe pas !' });
+        }
+        userIds = Array.isArray(userIds) ? userIds : [userIds];
+        userIds = userIds.map(userId => userId.trim());
+
+        const members = await Admin.find({ 
+                _id: {$in : userIds},
+                groups: { $nin : [group[0]._id] }, 
+                pharmaciesManaged: { $in: pharmaciesManaged } 
+            }).populate([
+                { path: 'country' },
+                { path: 'phone' },
+                { path: 'mobils' },
+                { path: 'setups' },
+                {path: 'pharmaciesManaged'},
+                { path: 'groups', populate: [
+                    { path: 'permissions' }
+                ]}
+            ]);
+
+        members.forEach(member => {
+            member.groups.push(group[0]);
+            member.save();
+        });
+        await registerActivity('Groupes', group[0]._id, user._id,  (members.length > 1 ? "les utilisateurs suivant ont ete ajoutes au groupe "+group[0].name : "l'utilisateur a ete ajoute au groupe "+group[0].name)+" : "+(members.map(m => m.name).join(', ')));
+
+        return res.status(200).json({'error': 0, user: user});
+    }catch (error) {
+        console.error('Error in pharmacyUsersList:', error);
+        return res.status(500).json({  error: 1, success: false, message: 'Erreur serveur', errorMessage: error.message
+        });
+    }
+}
+const pharmacyGroupsremoveMember = async (req, res) => {
+    try{
+        let { groupId, userId } = req.body;
+
+        if (!groupId || !userId) {
+            return res.status(404).json({ error: 1, success: false, message: 'Invalid group id', errorMessage: 'Le groupe n\'existe pas !' });
+        }
+
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error) { return res.status(404).json({ message: 'User not found' }); }
+        
+        const user = the_admin.the_user;
+        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+        
+        let pharmaciesManaged = user?.groups?.some(g => [ 'manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].includes(g.code))
+                    ? user.pharmaciesManaged.map(pharm => pharm._id)
+                    : [];
+
+        if (!pharmaciesManaged && pharmaciesManaged.length <= 0) {
+            return res.status(200).json({ 
+                'error': 1, 
+                success: false, 
+                message: 'Vous n\'avez aucune pharmacie !', 
+                errorMessage: 'Vous n\'avez aucune pharmacie !',
+            });
+        }
+        const userPermissions = await loadAllPermissions(user, req, res);
+        if (!userPermissions.permissions?.includes('groups.edit')) {
+            return res.status(200).json({ error: 1, success: false, message: 'Vous n\'avez pas les permissions nécessaires', errorMessage: 'Vous n\'avez pas les permissions nécessaires' });
+        }
+
+        let query = {};
+        query._id = groupId;
+        query.code = { $in: ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'] };
+
+        const group = await Group.find(query);
+        if (!group) {
+            return res.status(404).json({ error: 1, query,success: false, message: 'Le groupe n\'existe pas !', errorMessage: 'Le groupe n\'existe pas !' });
+        }
+        userId = Array.isArray(userId) ? userId : [userId];
+        userId = userId.map(uss => uss.trim());
+
+        const members = await Admin.find({ 
+                _id: {$in : userId},
+                groups: { $in : [group[0]._id] }, 
+                pharmaciesManaged: { $in: pharmaciesManaged } 
+            }).populate([
+                { path: 'country' },
+                { path: 'phone' },
+                { path: 'mobils' },
+                { path: 'setups' },
+                {path: 'pharmaciesManaged'},
+                { path: 'groups', populate: [
+                    { path: 'permissions' }
+                ]}
+            ]);
+
+        members.forEach(member => {
+            member.groups.pop(group[0]);
+            member.save();
+        });
+        await registerActivity('Groupes', group[0]._id, user._id,  (members.length > 1 ? "les utilisateurs suivant ont ete retires du groupe "+group[0].name : "l'utilisateur a ete retire du groupe "+group[0].name)+" : "+(members.map(m => m.name).join(', ')));
+
+        return res.status(200).json({'error': 0, user: user});
+    }catch (error) {
+        console.error('Error in pharmacyUsersList:', error);
+        return res.status(500).json({  error: 1, success: false, message: 'Erreur serveur', errorMessage: error.message
+        });
+    }
+}
+const pharmacyGroupsManage = async (req, res) => {
+    try{
+        let { addGroups, removeGroups, addPermissions, removePermissions, userId } = req.body;
+
+        if (!userId) {
+            return res.status(404).json({ error: 1, success: false, message: 'Invalid id', errorMessage: 'Invalid Id' });
+        }
+
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error) { return res.status(404).json({ message: 'User not found' }); }
+        
+        const user = the_admin.the_user;
+        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+        
+        let pharmaciesManaged = user?.groups?.some(g => [ 'manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].includes(g.code))
+                    ? user.pharmaciesManaged.map(pharm => pharm._id)
+                    : [];
+
+        if (!pharmaciesManaged && pharmaciesManaged.length <= 0) {
+            return res.status(200).json({ 
+                'error': 1, 
+                success: false, 
+                message: 'Vous n\'avez aucune pharmacie !', 
+                errorMessage: 'Vous n\'avez aucune pharmacie !',
+            });
+        }
+        const userPermissions = await loadAllPermissions(user, req, res);
+        if (!userPermissions.permissions?.includes('groups.edit')) {
+            return res.status(200).json({ error: 1, success: false, message: 'Vous n\'avez pas les permissions nécessaires', errorMessage: 'Vous n\'avez pas les permissions nécessaires' });
+        }
+
+        let query = {};
+        addGroups = Array.isArray(addGroups) ? addGroups : [addGroups];
+        removeGroups = Array.isArray(removeGroups) ? removeGroups : [removeGroups];
+
+        const allGroups = [...addGroups, ...removeGroups];
+
+        query._id = { $in :allGroups };
+        query.code = { $in: ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'] };
+
+        const group = allGroups ? await Group.find(query) : [];
+        if (group) {
+            userId = Array.isArray(userId) ? userId : [userId];
+            userId = userId.map(uss => uss.trim());
+
+            const members = await Admin.find({ _id: {$in : userId},groups: { $in : [group[0]._id] }, pharmaciesManaged: { $in: pharmaciesManaged } })
+                                            .populate([
+                                                { path: 'country' },
+                                                { path: 'phone' },
+                                                { path: 'mobils' },
+                                                { path: 'setups' },
+                                                {path: 'pharmaciesManaged'},
+                                                { path: 'groups', populate: [
+                                                    { path: 'permissions' }
+                                                ]}
+                                            ]);
+            
+            members.forEach(member => {
+                let the_finals_groups = member.groups;
+                if (removeGroups.length > 0) {
+                    the_finals_groups = the_finals_groups.filter(g => !removeGroups.includes(g._id));
+                }
+                if (addGroups.length > 0) {
+                    the_finals_groups.push(...addGroups);
+                }
+                member.groups = the_finals_groups;
+                member.save();
+            });
+            await registerActivity('Groupes', group[0]._id, user._id,  (members.length > 1 ? "les utilisateurs suivant ont ete retires ou ajoutes aux groupes "+group.map( g => g.name ).join(', ') : "l'utilisateur a ete retire ou ajoute au groupes "+group.map( g => g.name ).join(', ')+" : "+(members.map(m => m.name).join(', '))));
+        }
+        return res.status(200).json({'error': 0, group, user: user});
+    }catch (error) {
+        console.error('Error in pharmacyUsersList:', error);
+        return res.status(500).json({  error: 1, success: false, message: 'Erreur serveur', errorMessage: error.message
+        });
+    }
+}
 
 // Bulk actions endpoint
 const bulkUserActions = async (req, res) => {
@@ -4118,7 +4847,56 @@ const bulkUserActions = async (req, res) => {
         });
     }
 };
-// createPharmacyUser,
-//     bulkUserActions
-
-module.exports = { authentificateUser, setProfilInfo, loadGeneralsInfo, loadAllActivities, setSettingsFont, pharmacieList, pharmacieDetails, pharmacieNew, pharmacieEdit, pharmacieDelete, pharmacieApprove, pharmacieSuspend, pharmacieActive, pharmacieReject, pharmacieDocuments, pharmacieDocumentsDownload, pharmacieUpdate, pharmacieDocumentsUpload, pharmacieWorkingsHours, pharmacieActivities, loadHistoricMiniChat, pharmacyCategoriesList, pharmacieCategorieImagesUpload, pharmacyCategoriesCreate, pharmacyCategoryDetail, categoriesActivities, categorieUpdate, categorieDelete, pharmacyCategoriesImport, pharmacyProductsList, pharmacyProductsCreate, productsActivities, uploadProductImages, productsAdvancedSearch, productsStats, productDelete, pharmacyProductsImport, pharmacyProductDetail, productUpdate, AllPharmacieActivities, pharmacyUsersList, pharmacyPermissionsList };
+module.exports = { authentificateUser,
+    setProfilInfo,
+    loadGeneralsInfo,
+    loadAllActivities,
+    setSettingsFont,
+    pharmacieList,
+    pharmacieDetails,
+    pharmacieNew,
+    pharmacieEdit,
+    pharmacieDelete,
+    pharmacieApprove,
+    pharmacieSuspend,
+    pharmacieActive,
+    pharmacieReject,
+    pharmacieDocuments,
+    pharmacieDocumentsDownload,
+    pharmacieUpdate,
+    pharmacieDocumentsUpload,
+    pharmacieWorkingsHours,
+    pharmacieActivities,
+    loadHistoricMiniChat,
+    pharmacyCategoriesList,
+    pharmacieCategorieImagesUpload,
+    pharmacyCategoriesCreate,
+    pharmacyCategoryDetail,
+    categoriesActivities,
+    categorieUpdate,
+    categorieDelete,
+    pharmacyCategoriesImport,
+    pharmacyProductsList,
+    pharmacyProductsCreate,
+    productsActivities,
+    uploadProductImages,
+    productsAdvancedSearch,
+    productsStats,
+    productDelete,
+    pharmacyProductsImport,
+    pharmacyProductDetail,
+    productUpdate,
+    AllPharmacieActivities,
+    pharmacyUsersList,
+    pharmacyPermissionsList,
+    pharmacyGroupsList,
+    pharmacyGroupsJoin,
+    pharmacyGroupsLeave,
+    pharmacyGroupsgetMembers,
+    pharmacyGroupsgetAvailableUsers,
+    pharmacyGroupsaddMembers,
+    pharmacyGroupsremoveMember,
+    pharmacyGroupsManage,
+    pharmacyUsersCreate,
+    pharmacyUsersDetail
+};

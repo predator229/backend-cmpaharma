@@ -85,7 +85,7 @@ const checkPharmacyOwnerInfo = async (req, res) => {
             email: pharmacy_email,
             country: theCountrie._id,
             city: city,
-        });
+        }); 
 
         // Cas 1 : le propriétaire a déjà un compte
         the_user = await Admin.findOne({ email: owner_email }).populate([{ path: 'country' },{ path: 'pharmaciesManaged' },{ path: 'phone' },{ path: 'mobils' },{ path: 'setups' },{ path: 'groups', populate: [    { path: 'permissions' }]}]);
@@ -95,7 +95,7 @@ const checkPharmacyOwnerInfo = async (req, res) => {
                 return res.status(200).json({ error: 0, continue: false, errorMessage: 'L\'email du propriétaire du compte n\'est pas associé à un compte existant.' });
             }
 
-            if (the_user?.groups?.some(g => ['admin', 'manager'].includes(g.code))) {
+            if (the_user?.groups?.some(g => ['superadmin', 'manager_admin', 'admin_technique', 'support_admin', 'manager_pharmacy'].includes(g.code))) {
                 return res.status(200).json({ error: 0, continue: false, errorMessage: 'Ce compte ne peut pas être associé à une nouvelle pharmacie.' });
             }
         }

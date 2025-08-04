@@ -12,6 +12,7 @@ const Admin = require('@models/Admin');
 const SetupBase = require('@models/SetupBase');
 const Order = require('@models/Order');
 const Activity = require('@models/Activity');
+const Permission = require('@models/Permission');
 
 const nodemailer = require('nodemailer');
 
@@ -123,20 +124,28 @@ const getUserInfoByUUID = async (uuid, type) => {
 };
 
 const getTheCurrentUserOrFailed = async (req, res = null) => {
-    const { uid, infos = {}, type = "deliver", saveNewUser=false, tokenImp } = req.body;
+    const { uid, infos = {}, type = "deliver", saveNewUser=false, tokenImp, idUser } = req.body;
     
-     if (!uid) { return res.status(400).json({ error : 0, message: req.body});}
+     if (!uid) { return res.status(400).json({ error : 1, message: req.body});}
 
-    let uidObj = await Uid.findOne({ uid: uid });
+    let uidObj =await Uid.findOne({ uid: uid });
 
     if (saveNewUser && tokenImp != "243786cgoqt789" ) { saveNewUser = false }
+
+    // if (uidObj == null && idUser) {
+    //     const tothrow = type == 'deliver' 
+    //                 ? Deliver.findOne({ _id: idUser, disabled: false }).populate('uids') 
+    //                 : await Admin.findOne({ _id: idUser, isActivated: true }).populate('uids');
+
+    //     uidObj = !uid && tothrow && tothrow.uids ? tothrow.uids.first() : null;
+    // }
 
     let the_user = uidObj != null  ? (type == 'deliver' ? await Deliver.findOne({ uids: uidObj._id, disabled: false }) 
 
         .populate('country')
         .populate('phone')
         .populate('mobils') : 
-        await Admin.findOne({ uids: uidObj._id }) 
+        await Admin.findOne({ uids: uidObj._id, isActivated: true}) 
         .populate([
             { path: 'country' },
             { path: 'phone' },
@@ -352,6 +361,26 @@ const getTheCurrentUserOrFailed = async (req, res = null) => {
     }
     return {error : the_user ? 0 : 1, the_user:the_user, onlyShowListPharm :  Array.isArray(the_user?.pharmaciesManaged) ? the_user.pharmaciesManaged.map(function (pharm) { if (pharm.status === 'pending') {return pharm._id;}  }) : [], status:200, statuss: Array.isArray(the_user?.pharmaciesManaged) ? the_user.pharmaciesManaged.map(function (pharm) { return pharm.status; }) : []};
 };
+
+const loadAllPermissions = async (user=null, req, res) => {
+    if (!user) { 
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error) { return {permissions: []}; }
+    }
+    if (!user) { return {permissions: []}; }
+
+    const permissions = [];
+    user.groups?.forEach( group => {
+        group.permissions.forEach( permissionGroup => {
+            constThePermissions = permissionGroup.permissions;
+            constThePermissions.forEach( permission => {
+                permissions.push(permission);
+            });
+        });
+    });
+
+    return { permissions: permissions };
+}
 const registerActivity = async (type, id, author=false, title, description) => {
     const activity = new Activity({
         type: type,
@@ -420,4 +449,4 @@ const getListCountries = async (req, res) => {
         return res.status(500).json({ error: 'Failed to fetch countries', details: error.message });
     }
 }
-module.exports = { getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse, getUserInfoByEmail, signUpUserWithEmailAndPassword, createUserAndSendEmailLink,deleteUserByEmail, registerActivity, getListCountries };
+module.exports = { getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse, getUserInfoByEmail, signUpUserWithEmailAndPassword, createUserAndSendEmailLink,deleteUserByEmail, registerActivity, getListCountries, loadAllPermissions };

@@ -15,6 +15,10 @@ const { faker } = require('@faker-js/faker');
 const Country = require('@models/Country');
 const Permission = require('@models/Permission');
 const Group = require('@models/Group');
+const Admin = require('@models/Admin');
+const Mobil = require('@models/Mobil');
+const SetupBase = require('@models/SetupBase');
+
 const datas_permission = require('./pharmacies_permissions.json');
 
 const deliverRoutes = require('@routes/delivers/api');
@@ -35,12 +39,11 @@ const Category = require('./models/Category');
 const {getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse, registerActivity } = require('@tools/flutter_tools');
 
 const MiniChatMessage = require('@models/MiniChatMessage'); 
-// const Pharmacy = require('@models/Pharmacy'); 
 const MiniChatAttachement = require('@models/MiniChatAttachement');
 
 app.use(express.json());
 app.use(cors());
-app.use('/uploads', express.static(path.join(__dirname, 'uploads'))); // serveur de fichiers contenues dans le dossier upload
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
 app.use(helmet());
 
 async function seedGroupsWithValidation() {
@@ -160,6 +163,51 @@ async function importData() {
     }
 }
 
+async function fakeUser() { //generate fake users but no possibility to connect cuz not related to firebase.
+  try {
+    const groups = await Group.find({ code : {$in : ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant']} });
+    const existingUsers = groups ? await Admin.find({ groups : { $in : groups.map(g => g._id) } }) : [];
+    const counstries = await Country.find();
+    const setups = await SetupBase.find();
+
+    if (groups) {
+      for (let i = 0; i < 30; i++) {
+        const name = faker.person.firstName();
+        const surname = faker.person.lastName();
+        const country = counstries[Math.floor(Math.random() * counstries.length)];
+        const lengthUserGroup = Math.floor(Math.random() * groups.length);
+        const user_group = groups ? groups.slice(0, lengthUserGroup).map(g => g._id): [];
+
+        // const phone = new Mobil({
+        //   digits:  'fake-'+faker.phone.number().replace('-', ''),
+        //   indicatif: country.dial_code,
+        //   title: 'fake phone number for '+name+' '+surname,
+        // });
+        // await phone.save();
+        const user = {
+          name: 'fake-'+name,
+          surname: 'fake-'+surname,
+          email: 'fake-'+faker.internet.email(),
+          // phone: phone._id,
+          country: country._id,
+          city: 'fake-'+faker.location.city(),
+          address: faker.location.streetAddress(),
+          groups: user_group,
+          setups: setups[Math.floor(Math.random() * setups.length)]._id,
+          pharmaciesManaged : ['688a12de4922282243bfeea3'],
+        };
+
+        const existingUser = existingUsers.find(u => u.email === user.email);
+        if (!existingUser) {
+          await Admin.create(user);
+        }
+      }
+    }
+  }catch (error) {
+    console.error('❌ Error when generating fake users :', error);
+  }
+}
+
 async function loadModels(directory) {
     const models = {};
     try {
@@ -187,9 +235,11 @@ const connectWithRetry = () => {
     .then(async () => {
       if (process.env.NODE_ENV == 'development') { console.log(`✅ MongoDB connecté avec succès`); }
 
-        if (process.env.NODE_ENV == 'developpement') {
-          await importData();
-        }
+        // if (process.env.NODE_ENV == 'developpement') {
+        //   await importData();
+        // }
+        // await seedGroupsWithValidation();
+        // await fakeUser();
         app.use('/deliver/api', deliverRoutes);
         app.use('/admin/api', adminRoutes);
 
