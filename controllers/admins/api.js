@@ -22,7 +22,7 @@ const File = require('@models/File');
 const Category = require('@models/Category');
 const Product = require('@models/Product');
 const Permission = require('@models/Permission');
-
+const Conversation = require('@models/Conversation');
 const path = require('path');
 
 const Group = require('@models/Group');
@@ -3511,7 +3511,7 @@ const productDelete = async (req, res) => {
         return res.status(500).json({ success: false, error: error.message });
     }
 };
-const loadAllActivitiesAndSendMailAdmins = async (updatedPharmacy, updates, user, extra = '') => {
+const loadAllActivitiesAndSendMailAdmins = async (updatedPharmacy, updates, user, extra = '', notEmail = false) => {
     let messageToSendToAdmin = `
     <div style="font-family: Arial, sans-serif; color: #222;">
         <p>
@@ -3574,6 +3574,22 @@ const loadAllActivitiesAndSendMailAdmins = async (updatedPharmacy, updates, user
     if (updatedPharmacy.status == "pending") {
         await registerActivity('Pharmacie', updatedPharmacy._id, user._id, "Pharmacie Mise à jour", `La pharmacie ${updatedPharmacy.name} a été mise à jour et son statut est maintenant inactif`);
     }
+    if (updates.includes('user.edit.name')) {
+        await registerActivity('Utilisateur', updatedPharmacy._id, user._id, "Nom Mis à jour", `Le nom de l'utilisateur ${updatedPharmacy.name} a été mis à jour en ${updatedPharmacy.name}`);
+    }
+    if (updates.includes('user.edit.surname')) {
+        await registerActivity('Utilisateur', updatedPharmacy._id, user._id, "Prenom Mis à jour", `Le prenom de l'utilisateur ${updatedPharmacy.name} a été mis à jour en ${updatedPharmacy.surname}`);
+    }
+    if (updates.includes('user.edit.address')) {
+        await registerActivity('Utilisateur', updatedPharmacy._id, user._id, "Adresse Mis à jour", `L'adresse de l'utilisateur ${updatedPharmacy.name} a été mis à jour en ${updatedPharmacy.address}`);
+    }
+    if (updates.includes('user.edit.city')) {
+        await registerActivity('Utilisateur', updatedPharmacy._id, user._id, "Ville Mis à jour", `La ville de l'utilisateur ${updatedPharmacy.name} a été mis à jour en ${updatedPharmacy.city}`);
+    }
+    if (updates.includes('user.edit.phone')) {
+        await registerActivity('Utilisateur', updatedPharmacy._id, user._id, "Telephone Mis à jour", `Le numero de téléphone de l'utilisateur ${updatedPharmacy.name} a été mis à jour en ${updatedPharmacy.phone.dial_code} ${updatedPharmacy.phone.digits}`);
+    }
+    if (notEmail) { return; }
 
     let EmailTo = [];
     if (process.env.environment === 'development') {
@@ -3616,76 +3632,6 @@ const loadHistoricMiniChat = async (req, res) => {
         return res.status(500).json({ error: error.message });
     }
 }
-// const pharmacyUsersList = async (req, res) => {
-//     try {
-//         const { status, pharmaciesId, search, email, name, surnmame } = req.body;
-
-//         // page: this.currentPage,
-//         // limit: this.itemsPerPage,
-//         // search: this.searchTerm,
-//         // status: this.selectedStatus,
-//         // role: this.selectedRole,
-//         // pharmacy: this.selectedPharmacy,
-//         // sortBy: this.sortBy,
-//         // sortOrder: this.sortOrder
-
-
-//         var the_admin = await getTheCurrentUserOrFailed(req, res);
-
-//         if (the_admin.error) {
-//             return res.status(404).json({ message: 'User not found' });
-//         }
-        
-//         const user = the_admin.the_user;
-//         user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
-
-//         let query = {};
-//         const pharmaciesManaged = pharmaciesId ? ( Array.isArray(pharmaciesId) ? pharmaciesId : [pharmaciesId] ) : (user?.groups?.some(g => ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].includes(g.code))  ? user.pharmaciesManaged.map(pharm => pharm._id)  : []);
-        
-//         if (!pharmaciesManaged) {
-//             return res.status(200).json({ 'error':1, success: false, message:'Vous n\'avez aucune pharmacie !', errorMessage:'Vous n\'avez aucune pharmacie !' });
-//         }
-//         else { query.pharmaciesManaged = { $in: pharmaciesId }; }
-
-//         if (status) {  query.status = status;  }
-//         else { query.status = { $nin: ['deleted'] }; }
-
-//         if (search) {
-//             const cleanedSearch = search.replace(/\s+/g, '').trim();
-//             const regex = new RegExp(cleanedSearch, 'i');
-//             query.$or = [
-//                 { name: regex },
-//                 { surname: regex },
-//                 { city: regex },
-//                 { address: regex },
-//                 { email: regex },
-//             ];
-//         }
-
-//         const pharmaciesList = user?.groups?.some(g => ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].includes(g.code)) 
-//             ? user.pharmaciesManaged.map(pharm => ({ value: pharm._id, label: pharm.name })) 
-//             : [];
-//         const groups = Group.find({ code: {$in : ['support_admin', 'manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant']} }).populate('permissions');
-
-//         let users = await Admin.find(query)
-//                 .populate([
-//                     { path: 'country' },
-//                     { path: 'pharmaciesManaged' },
-//                     { path: 'phone' },
-//                     { path: 'mobils' },
-//                     { path: 'setups' },
-//                     { path: 'groups', populate: [
-//                         { path: 'permissions' }
-//                     ]}
-//                 ])
-//                 .lean();
-
-//         return res.status(200).json({ 'error': 0, user: user, data: users, pharmaciesList, groups });
-//     } catch (error) {
-//         return res.status(500).json({ error: error.message });
-//     }
-// };
-
 const pharmacyUsersList = async (req, res) => {
     try {
         const { page = 1, limit = 10,search,status,role,pharmacy,sortBy = 'createdAt',sortOrder = 'desc',pharmaciesId,email,name,surname } = req.body;
@@ -3972,18 +3918,12 @@ const pharmacyUsersDetail = async (req, res) => {
                 : [group.permissions?._id]
         );
 
-        // Supprimer les doublons si nécessaire
         permissionIds = [...new Set(permissionIds.map(id => id.toString()))];
 
-        // Rechercher les permissions spécifiques à la plateforme "Pharmacy"
         const permissions = await Permission.find({ 
             plateform: 'Pharmacy', 
             _id: { $in: permissionIds } 
         }).lean();
-
-        // const groups = await Group.find({ 
-        //     _id: { $in: user?.groups.map(g => g._id) } 
-        // }).populate('permissions').lean();
 
         return res.status(200).json({  'error': 0,  success: true, user: user,  data: {
                 user: users,
@@ -3997,6 +3937,272 @@ const pharmacyUsersDetail = async (req, res) => {
         console.error('Error in pharmacyUsersList:', error);
         return res.status(500).json({  error: 1, success: false, message: 'Erreur serveur', errorMessage: error.message
         });
+    }
+};
+const pharmacyUsersEditProfile = async (req, res) => {
+    try {
+        const { userId,name, surname, email, phone, country, city, address, isActivated} = req.body;
+
+        if (!userId) {
+            return res.status(200).json({  error: 1, success: false, message: 'Erreur de paramètres', errorMessage: 'Invalid Id' });
+        }
+
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error) { return res.status(404).json({ message: 'User not found' }); }
+        
+        const user = the_admin.the_user;
+        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        let query = {};
+        let pharmaciesManaged = user?.groups?.some(g => [ 'manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].includes(g.code))
+                    ? user.pharmaciesManaged.map(pharm => pharm._id)
+                    : [];
+
+        if (pharmaciesManaged && pharmaciesManaged.length > 0) {
+            query.pharmaciesManaged = { $in: pharmaciesManaged };
+        } else if (pharmaciesManaged !== null && pharmaciesManaged?.length === 0) {
+            return res.status(200).json({ 
+                'error': 1, 
+                success: false, 
+                message: 'Vous n\'avez aucune pharmacie !', 
+                errorMessage: 'Vous n\'avez aucune pharmacie !',
+            });
+        }
+
+        let theUser = await Admin.findOne({_id:userId})
+        if (!theUser) {
+            return res.status(200).json({ 
+                'error': 1, 
+                success: false, 
+                message: 'Utilisateur non trouvé !', 
+                errorMessage: 'Utilisateur non trouvé !',
+            });
+        }
+
+        const userPermissions = await loadAllPermissions(user, req, res);
+        if (!userPermissions.permissions?.includes('utilisateurs.edit')) {
+            return res.status(200).json({ error: 1, success: false, message: 'Vous n\'avez pas les permissions nécessaires', errorMessage: 'Vous n\'avez pas les permissions nécessaires' });
+        }
+
+        var toUpdate = [];
+        query._id = { $nin : userId};
+        if (name) { 
+            query.name = name;
+            theUser.name = name;
+            if (user.name !== name) {
+                toUpdate.push('user.edit.name');
+            }
+         }
+        if (surname) { 
+            query.surname = surname;
+            theUser.surname = surname;
+            if (user.surname !== surname) {
+                toUpdate.push('user.edit.surname');
+            }
+        }
+        // if (email) { 
+        //     query.email = email;
+        //     theUser.email = email;
+        // }
+        // if (phone) { query.phone = phone; }
+        let theNewCountry = null;
+        if (country) { 
+            theNewCountry = await Country.findOne({ _id: country });
+            if (theNewCountry) {
+                query.country = country;
+                theUser.country = country;
+                if (user.country !== country) {
+                    toUpdate.push('user.edit.country');
+                }
+            }
+            query.country = country;
+        }
+        if (city) { 
+            query.city = city;
+            theUser.city = city;
+            if (user.city !== city) {
+                toUpdate.push('user.edit.city');
+            }
+        }
+        if (address) { 
+            query.address = address; 
+            theUser.address = address;
+            if (user.address !== address) {
+                toUpdate.push('user.edit.address');
+            }
+        }
+        if (isActivated) { 
+            query.isActivated = isActivated;
+            theUser.isActivated = isActivated;
+            if (user.isActivated !== isActivated) {
+                toUpdate.push('user.edit.isActivated');
+            }
+        }
+
+        let userToCheck = await Admin.findOne(query)
+        query._id = userId;
+
+        if (userToCheck) {
+            return res.status(200).json({ 
+                'error': 1, 
+                success: false, 
+                message: 'Un utilisateur avec ces informations existe déja !', 
+                errorMessage: 'Un utilisateur avec ces informations existe déja !',
+            });
+        }
+
+        await theUser.save();
+        theUser.populate([
+                {  path: 'country', select: 'name code dialCode flag' },
+                {  path: 'pharmaciesManaged',},
+                { path: 'phone', },
+                {  path: 'mobils'},
+                {  path: 'setups', },
+                { 
+                    path: 'groups', 
+                    populate: { path: 'permissions' }
+                }
+            ]);
+        if (toUpdate.length) { await loadAllActivitiesAndSendMailAdmins (theUser, toUpdate, user, '', true); }
+        const pharmaciesList = user?.groups?.some(g => ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].includes(g.code)) 
+            ? user.pharmaciesManaged.map(pharm => ({ 
+                value: pharm._id, 
+                label: pharm.name 
+              })) 
+            : [];
+
+        let pharmsFullInfos = [];
+        if (user?.groups?.some(g => ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].includes(g.code))) {
+            const pharmacyIds = user.pharmaciesManaged?.map(pharm => pharm._id) || [];
+
+            pharmsFullInfos = await Pharmacy.find({ _id: { $in: pharmacyIds } }).populate([
+                { path: 'location' },
+                { path: 'country' },
+                { path: 'workingHours' },
+                {
+                    path: 'deliveryZone',
+                    populate: {
+                        path: 'coordinates',
+                        populate: { path: 'points' },
+                    },
+                },
+                {
+                    path: 'documents',
+                    populate: [
+                        { path: 'logo' },
+                        { path: 'license' },
+                        { path: 'idDocument' },
+                        { path: 'insurance' },
+                    ],
+                },
+            ]);
+        }
+
+        let permissionIds = user?.groups.flatMap(group => 
+            Array.isArray(group.permissions)
+                ? group.permissions.map(p => p._id)
+                : [group.permissions?._id]
+        );
+
+        permissionIds = [...new Set(permissionIds.map(id => id.toString()))];
+
+        const permissions = await Permission.find({ 
+            plateform: 'Pharmacy', 
+            _id: { $in: permissionIds } 
+        }).lean();
+
+        return res.status(200).json({  'error': 0,  success: true, user: user,  data: {
+                user: theUser,
+                permissions,
+                countries: await Country.find(),
+            },
+            pharmaciesList, pharmsFullInfos
+        });
+
+    } catch (error) {
+        console.error('Error in pharmacyUsersList:', error);
+        return res.status(500).json({  error: 1, success: false, message: 'Erreur serveur', errorMessage: error.message
+        });
+    }
+};
+const usersActivities = async (req, res) => {
+    try {
+        const the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        const user = the_admin.the_user;
+        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        const userInGroupAdmin = Array.isArray(user.groups) &&
+            user.groups.some(g => ['superadmin', 'manager_admin', 'admin_technique'].includes(g.code));
+
+        let { id, prePage, user_: user_, all } = req.body;
+
+        if ((!id || (Array.isArray(id) && id.length === 0)) && !userInGroupAdmin) {
+            id = user.pharmaciesManaged?.map(pharm => pharm._id);
+            if (!id || id.length === 0) {
+                return res.status(400).json({ message: 'Missing required fields' });
+            }
+        }
+
+        let _users = false;
+        if (id) {
+            _users = await Admin.find(
+                Array.isArray(id)
+                    ? { pharmaciesManaged: { $in: id } }
+                    : { _id: id }
+            );
+        }
+
+        if (!_users && !userInGroupAdmin) {
+            return res.status(404).json({ success: false, message: 'Utilisateur non trouvé' });
+        }
+
+        const query = {};
+        if (user_) {
+            query.author = user_.toString();
+        }
+        if (_users) {
+            query.id_object = { $in: _users.map(c => c._id) };
+        }
+
+        const limit = parseInt(prePage) || 10;
+        const activities = all
+            ? await Activity.find(query).sort({ created_at: -1 })
+            : await Activity.find(query).sort({ created_at: -1 }).limit(limit);
+
+        const validAuthorIds = activities
+            ? activities
+                  .map(act => act.author)
+                  .filter(id => mongoose.Types.ObjectId.isValid(id))
+            : [];
+
+        const users = validAuthorIds.length > 0
+            ? await Admin.find({ _id: { $in: validAuthorIds } }).lean()
+            : [];
+
+        const usersMap = {};
+        users.forEach(each => {
+            each.photoURL = each.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(each.name || 'User')}&background=random&size=500`;
+
+            if (each._id && mongoose.Types.ObjectId.isValid(each._id)) {
+                usersMap[each._id] = {
+                    name: each._id.toString() === user._id.toString() ? 'Vous' : `${each.name} ${each.surname}`,
+                    img: each.photoURL
+                };
+            }
+        });
+
+        return res.status(200).json({
+            error: 0,
+            usersMap,
+            data: activities,
+            user
+        });
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
     }
 };
 const pharmacyUsersCreate = async (req, res) => {
@@ -4161,7 +4367,7 @@ const pharmacyUsersCreate = async (req, res) => {
                     populate: { path: 'permissions', select: 'name code description' }
                 }
             ])
-        await registerActivity('Nouvel utilisateur', newUser._id, user._id, "Un nouvel utilisateur a ete ajoute", `L'utulisateur : ${newUser.name}  ${newUser.name} a etee ajoute par ${user.name} ${user.name}`);
+        await registerActivity('Nouvel utilisateur', newUser._id, user._id, "Un nouvel utilisateur a ete ajoute", `L'utlisateur : ${newUser.name}  ${newUser.name} a etee ajoute par ${user.name} ${user.name}`);
         await registerActivity('Genaral Settings', setups_base._id, user._id,  "Nouveau parametres generals ajoute", "Des parametres generaux de utilisateur ont ete crees");
 
         if (sendWelcomeEmail) {
@@ -4744,6 +4950,160 @@ const pharmacyGroupsManage = async (req, res) => {
         });
     }
 }
+const loadConversations = async (req, res) => {
+    try {
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error ) { return res.status(404).json({ message: 'User not found' }); }
+
+        const { limit = 10 } = req.body;
+
+        var user = the_admin.the_user;
+        user.photoURL =  user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+        
+        // const userPermissions = await loadAllPermissions(user, req, res);
+        // if (!userPermissions.permissions?.includes('inbox.edit')) {
+        //     return res.status(200).json({ error: 1, success: false, message: 'Vous n\'avez pas les permissions nécessaires', errorMessage: 'Vous n\'avez pas les permissions nécessaires' });
+        // }
+
+        let pharmaciesManaged = user?.groups?.some(g => [ 'manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].includes(g.code))
+            ? user.pharmaciesManaged.map(pharm => pharm._id)
+            : [];
+
+        if (!pharmaciesManaged && pharmaciesManaged.length <= 0) {
+            return res.status(200).json({ 
+                'error': 1, 
+                success: false, 
+                message: 'Vous n\'avez aucune pharmacie !', 
+                errorMessage: 'Vous n\'avez aucune pharmacie !',
+            });
+        }
+
+        const allUsers = await Admin.find({ pharmaciesManaged: { $in: pharmaciesManaged } });
+        const activities = await Activity.find({author: {$in: allUsers.map(u => u._id)}}).sort({ updatedAt: -1 }) .limit(5);
+
+        const query = {
+            participants: { $in: [user._id] },
+        };
+
+        let conversations = await Conversation.find(query).
+        populate(
+            {
+                path: 'participants',
+                populate: [
+                    { path: 'country' },
+                    { path: 'phone' },
+                    { path: 'mobils' },
+                    { path: 'setups' },
+                    { path: 'groups' },
+                    { path: 'pharmaciesManaged' },
+                ]
+            }
+        )
+        .sort({ updatedAt: -1 })   // tri décroissant par date de modif
+        .limit(limit ? parseInt(limit) : 10);
+
+        const mesQuery = { conversation: { $in: conversations.map(c => c._id) } };
+
+        const messages = conversations.length ? await MiniChatMessage.find(mesQuery).populate('attachments') : [];
+        const formattedConversations = conversations.map(conv => {
+            const convMessages = messages
+                .filter(msg => msg.conversation?.toString() === conv._id.toString())
+                .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+            const lastMessage = convMessages.length ? convMessages[0] : null;
+
+            // Calcul des messages non lus pour l'utilisateur
+            const unreadCount = convMessages.filter(msg =>
+                !msg.seen && msg.senderId !== user._id.toString()
+            ).length;
+
+            return {
+                _id: conv._id,
+                participants: conv.participants.map(p => new Admin(p)),
+                lastMessage: lastMessage ? new MiniChatMessage(lastMessage) : undefined,
+                unreadCount: unreadCount,
+                isGroup: conv.isGroup || false,
+                groupName: conv.groupName || null,
+                createdAt: conv.createdAt,
+                updatedAt: conv.updatedAt
+            };
+        });
+        return res.status(200).json({ error: 0, success: true, activities, data: formattedConversations});
+
+    } catch (error) {
+        return res.status(500).json({ error: error.message });
+    }
+}
+const createConversation = async (req, res) => {
+  try {
+    const the_admin = await getTheCurrentUserOrFailed(req, res);
+    if (the_admin.error) return res.status(404).json({ message: 'User not found' });
+
+    const user = the_admin.the_user;
+    const { participants, isGroup, groupName } = req.body;
+
+    if (!participants || !Array.isArray(participants) || participants.length === 0) {
+      return res.status(400).json({ error: 'Participants manquants' });
+    }
+
+    const allParticipants = [...new Set([...participants, user._id.toString()])];
+
+    // Vérifie si une conversation identique existe déjà (non groupée)
+    let existingConversation = await Conversation.findOne({
+      isGroup: false,
+      participants: { $all: allParticipants, $size: allParticipants.length }
+    });
+
+    if (!isGroup && existingConversation) {
+      return res.status(200).json({ success: true, data: existingConversation });
+    }
+
+    const conversation = new Conversation({
+      participants: allParticipants,
+      isGroup,
+      groupName: isGroup ? groupName : null
+    });
+
+    await conversation.save();
+
+    return res.status(200).json({ success: true, data: conversation });
+
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+};
+const loadMessages = async (req, res) => {
+  try {
+    const the_admin = await getTheCurrentUserOrFailed(req, res);
+    if (the_admin.error) return res.status(404).json({ message: 'User not found' });
+
+    const user = the_admin.the_user;
+    const { conversationId } = req.body;
+
+    if (!conversationId) {
+      return res.status(400).json({ error: 'conversationId requis' });
+    }
+
+    // Vérifie que le user fait bien partie de la conversation
+    const conversation = await Conversation.findById(conversationId);
+    if (!conversation || !conversation.participants.includes(user._id)) {
+      return res.status(403).json({ error: 'Accès non autorisé à cette conversation' });
+    }
+
+    const messages = await MiniChatMessage.find({
+      conversation: conversationId,
+      isDeleted: false
+    }).populate('attachments');
+
+    return res.status(200).json({
+      success: true,
+      data: messages
+    });
+
+  } catch (error) {
+    return res.status(500).json({ error: error.message });
+  }
+};
 
 // Bulk actions endpoint
 const bulkUserActions = async (req, res) => {
@@ -4898,5 +5258,10 @@ module.exports = { authentificateUser,
     pharmacyGroupsremoveMember,
     pharmacyGroupsManage,
     pharmacyUsersCreate,
-    pharmacyUsersDetail
+    pharmacyUsersDetail,
+    pharmacyUsersEditProfile,
+    usersActivities,
+    loadConversations,
+    createConversation,
+    loadMessages
 };

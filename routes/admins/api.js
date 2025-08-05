@@ -53,7 +53,12 @@ const { authentificateUser,
     pharmacyGroupsremoveMember,
     pharmacyGroupsManage,
     pharmacyUsersCreate,
-    pharmacyUsersDetail
+    pharmacyUsersDetail,
+    pharmacyUsersEditProfile,
+    usersActivities,
+    loadConversations,
+    createConversation,
+    loadMessages
 } = require('@controllers/admins/api');
 
 const {checkPharmacyInfo, checkPharmacyOwnerInfo} = require('@controllers/guest/api');
@@ -144,7 +149,8 @@ router.post('/managers/pharmacies/activities', deliververifyFirebaseToken, pharm
     router.post('/pharmacy-management/users/list',deliververifyFirebaseToken, pharmacyUsersList);
     router.post('/pharmacy-management/users/detail',deliververifyFirebaseToken, pharmacyUsersDetail);
     router.post('/pharmacy-management/users/create',deliververifyFirebaseToken, pharmacyUsersCreate);
-
+    router.post('/pharmacy-management/users/update-profile',deliververifyFirebaseToken, pharmacyUsersEditProfile);
+    router.post('/pharmacy-management/users/activities',deliververifyFirebaseToken, usersActivities);
 
     //Routes permissions et groupes
     router.post('/pharmacy-management/permissions/list',deliververifyFirebaseToken, pharmacyPermissionsList);
@@ -165,6 +171,9 @@ router.post('/tools/activities', deliververifyFirebaseToken, AllPharmacieActivit
 
 //mini-chat
 router.post('/chat/pharmacy/messages', deliververifyFirebaseToken, loadHistoricMiniChat);
+router.post('/chat/pharmacy/messages/conversation', deliververifyFirebaseToken, loadConversations);
+router.post('/chat/pharmacy/messages/conversation/create', deliververifyFirebaseToken, createConversation);
+router.post('/chat/pharmacy/messages/conversation/loadMessage', deliververifyFirebaseToken, loadMessages);
 
 
 module.exports = router;

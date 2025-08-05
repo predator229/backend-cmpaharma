@@ -28,6 +28,7 @@ const { createAuthMiddleware } = require('@middlewares/auth');
 
 const deliverSocketRoutes = require('@routes/delivers/api_socket');
 const adminSocketRoutes = require('@controllers/admins/api_socket');
+const conversationSocketRoutes = require('@controllers/admins/api_socket_conversation');
 
 const app = express();
 const PORT = process.env.PORT || 5050;
@@ -248,7 +249,8 @@ const connectWithRetry = () => {
 
         const connectedUsers = new Map();
         const deliverNamespace = io.of('/deliver');
-        const adminNamespace = io.of('/admin/websocket');
+        const chatpharmacyParams = io.of('/admin/websocket');
+        // const conversationNamespace = io.of('/admin/websocket/conversation');
 
         const { verifyFirebaseSocketToken: deliverVerifyFirebaseSocketToken } = createAuthMiddleware('deliver');
         const { verifyFirebaseSocketToken: adminVerifyFirebaseSocketToken } = createAuthMiddleware('admin');
@@ -259,10 +261,15 @@ const connectWithRetry = () => {
             deliverSocketRoutes(socket);
         });
 
-        adminNamespace.use(adminVerifyFirebaseSocketToken);
-        adminNamespace.on('connection', async (socket) => {
-          adminSocketRoutes(socket, adminNamespace);
+        chatpharmacyParams.use(adminVerifyFirebaseSocketToken);
+        chatpharmacyParams.on('connection', async (socket) => {
+          adminSocketRoutes(socket, chatpharmacyParams);
         });
+
+        // conversationNamespace.use(adminVerifyFirebaseSocketToken);
+        // conversationNamespace.on('connection', async (socket) => {
+        //   conversationSocketRoutes(socket, conversationNamespace);
+        // });
 
         server.listen(PORT, () => {
             console.log(`🚀 Le server est lancé et tourne sur le port ${PORT}`);
@@ -274,5 +281,3 @@ const connectWithRetry = () => {
     });
 }
   connectWithRetry();
-
-

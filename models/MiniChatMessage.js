@@ -7,6 +7,7 @@ const minichatmessageSchema = new mongoose.Schema({
   senderType: { type: String, required: true, enum: ['admin', 'pharmacy'] },
 
   for: { type: mongoose.Schema.Types.ObjectId, ref: 'Pharmarcy', required: false },
+  conversation: { type: mongoose.Schema.Types.ObjectId, ref: 'Conversation', required: false },
   message: { type: String, required: false },
   attachments: { type: mongoose.Schema.Types.ObjectId, ref: 'File' , required: false},
   isActivated: { type: Boolean, default: true },
