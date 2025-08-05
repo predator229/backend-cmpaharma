@@ -3,6 +3,7 @@ const Pharmacy = require('@models/Pharmacy');
 const MiniChatAttachement = require('@models/MiniChatAttachement');
 const File = require('@models/File');
 const Conversation = require('@models/Conversation');
+const Admin = require('@models/Admin');
 
 const {getUserInfoByUUID, getTheCurrentUserOrFailed, generateUserResponse, registerActivity } = require('@tools/flutter_tools');
 

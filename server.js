@@ -250,7 +250,7 @@ const connectWithRetry = () => {
         const connectedUsers = new Map();
         const deliverNamespace = io.of('/deliver');
         const chatpharmacyParams = io.of('/admin/websocket');
-        // const conversationNamespace = io.of('/admin/websocket/conversation');
+        const conversationNamespace = io.of('/admin/websocket/conversation');
 
         const { verifyFirebaseSocketToken: deliverVerifyFirebaseSocketToken } = createAuthMiddleware('deliver');
         const { verifyFirebaseSocketToken: adminVerifyFirebaseSocketToken } = createAuthMiddleware('admin');
@@ -266,10 +266,10 @@ const connectWithRetry = () => {
           adminSocketRoutes(socket, chatpharmacyParams);
         });
 
-        // conversationNamespace.use(adminVerifyFirebaseSocketToken);
-        // conversationNamespace.on('connection', async (socket) => {
-        //   conversationSocketRoutes(socket, conversationNamespace);
-        // });
+        conversationNamespace.use(adminVerifyFirebaseSocketToken);
+        conversationNamespace.on('connection', async (socket) => {
+          conversationSocketRoutes(socket, conversationNamespace);
+        });
 
         server.listen(PORT, () => {
             console.log(`🚀 Le server est lancé et tourne sur le port ${PORT}`);
