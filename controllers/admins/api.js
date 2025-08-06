@@ -934,7 +934,7 @@ const pharmacieDocumentsUpload = async (req, res) => {
 
         const missingFields = [];
         if (!file) missingFields.push('file');
-        if (!type_ || !['logo', 'license', 'idDocument', 'insurance', 'chat_pharm_apartment'].includes(type_)) missingFields.push('type_');
+        if (!type_ || !['logo', 'license', 'idDocument', 'insurance', 'chat_pharm_apartment', 'internal_chat'].includes(type_)) missingFields.push('type_');
         if (!pharmacyId) missingFields.push('pharmacyId');
         if (!uid) missingFields.push('uid');
 
@@ -950,13 +950,13 @@ const pharmacieDocumentsUpload = async (req, res) => {
         const user = the_admin.the_user;
         user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
 
-        const pharmacy = await Pharmacy.findById(pharmacyId);
+        const pharmacy = type_ == 'internal_chat' ? await Conversation.findById(pharmacyId) :  await Pharmacy.findById(pharmacyId);
         if (!pharmacy) return res.status(404).json({ error: 1, success: false, message: 'Pharmacie non trouvée' });
 
         const thetime = Date.now().toString();
         const extension = file.originalname ? file.originalname.split('.').pop() : 'png';
 
-        if (type_ != 'chat_pharm_apartment') {
+        if (['chat_pharm_apartment', 'internal_chat'].includes(type_)) {
             const existant = await File.find({
                 fileType: type_,
                 'linkedTo.model': 'Pharmacies',
@@ -985,13 +985,13 @@ const pharmacieDocumentsUpload = async (req, res) => {
         file.path = newFilePath;
         const file_ = new File({
             originalName: file.originalname ?? ("new_file_" + thetime),
-            fileName: `${pharmacy.name}_${type_}_${thetime}.${extension}`,
+            fileName: `${pharmacy.name ?? 'conv_'+pharmacyId}_${type_}_${thetime}.${extension}`,
             fileType: type_,
             fileSize: file.size,
             url: file.path,
             extension: extension,
             uploadedBy: user._id,
-            linkedTo: { model: "Pharmacies", objectId: pharmacy._id, },
+            linkedTo: { model: type_ == 'internal_chat' ? 'Conversations' :"Pharmacies", objectId: pharmacy._id, },
             tags: [],
             isPrivate: type_ === 'logo',
             meta: {
@@ -1003,28 +1003,25 @@ const pharmacieDocumentsUpload = async (req, res) => {
 
         await file_.save();
 
-        if (type_ != 'chat_pharm_apartment'){
+        if (!['chat_pharm_apartment', 'internal_chat'].includes(type_)){
             pharmacy.documents = pharmacy.documents || {};
             pharmacy.documents[type_] = file_._id;
             await pharmacy.save();
-        }
-        pharmacy.populate([
-            { path: 'location'},
-            { path: 'country'},
-            { path: 'workingHours'},
-            {path: 'deliveryZone', populate: [
-                { path: 'coordinates', populate: [{path: 'points'},]},
-                
-            ]},
-            { path: 'documents', populate: [
-                { path: 'logo'},
-                { path: 'license'},
-                { path: 'idDocument'},
-                { path: 'insurance'},
-            ]},
-        ]);
-
-        if (type_ != 'chat_pharm_apartment'){
+            pharmacy.populate([
+                { path: 'location'},
+                { path: 'country'},
+                { path: 'workingHours'},
+                {path: 'deliveryZone', populate: [
+                    { path: 'coordinates', populate: [{path: 'points'},]},
+                    
+                ]},
+                { path: 'documents', populate: [
+                    { path: 'logo'},
+                    { path: 'license'},
+                    { path: 'idDocument'},
+                    { path: 'insurance'},
+                ]},
+            ]);
             await loadAllActivitiesAndSendMailAdmins(pharmacy, ['document'], user, type_);
         }
         res.json({ error: 0, success: true, fileId: file_._id,  user: user, data: pharmacy, message: `Document ${type_} pour la pharmacie ${pharmacy.name} uploadé avec succès sur le serveur` });
@@ -1412,51 +1409,69 @@ const pharmacieLocation = async (req, res) => {
 };
 const pharmacieActivities = async (req, res) => {
     try {
-        var the_admin = await getTheCurrentUserOrFailed(req, res);
-        if (the_admin.error ) { return res.status(404).json({ message: 'User not found' }); }
+        const the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error) {
+            return res.status(404).json({ message: 'User not found' });
+        }
 
-        var user = the_admin.the_user;
-        user.photoURL =  user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+        const user = the_admin.the_user;
+        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
 
         const userInGroupAdmin = Array.isArray(user.groups) && user.groups.length > 0
             ? user.groups.some(g => ['superadmin', 'manager_admin', 'admin_technique'].includes(g.code))
             : false;
 
         let { id, all, user_ } = req.body;
-        if ( (!id || (Array.isArray(id) && id.length === 0)) && !userInGroupAdmin ) {
-            id = user.pharmaciesManaged?.map( pharm => pharm._id );
-            if (!id) {  return res.status(400).json({ message: 'Missing required fields'}); }
+
+        if ((!id || (Array.isArray(id) && id.length === 0)) && !userInGroupAdmin) {
+            id = user.pharmaciesManaged?.map(pharm => pharm._id) ?? null;
+            if (!id || id.length === 0) {
+                return res.status(400).json({ message: 'Missing required fields' });
+            }
         }
 
-        let pharmacies = id ? await Pharmacy.find( {_id : Array.isArray(id) ? {$in : id} : id }) : false;
-        if (!pharmacies && !userInGroupAdmin) { 
+        const pharmacies = id
+            ? await Pharmacy.find({ _id: Array.isArray(id) ? { $in: id } : id })
+            : [];
+
+        if ((!pharmacies || pharmacies.length === 0) && !userInGroupAdmin) {
             return res.status(404).json({ success: false, message: 'Pharmacie non trouvée' });
         }
 
-        query = {};
+        const query = {};
         if (user_ && typeof user_ === 'string') {
             query.author = user_;
         } else if (user_ && typeof user_.toString === 'function') {
             query.author = user_.toString();
         }
-        if (pharmacies) { query.id_object = { $in: pharmacies.map(c => c._id) }; }
-        const activities = all ? await Activity.find(query).sort({ created_at: -1 }) : await Activity.find(query).sort({ created_at: -1 }).limit(10);
 
-        const validAuthorIds = activities
-            ? activities.map(act => act.author).filter(id => mongoose.Types.ObjectId.isValid(id))
+        if (pharmacies && pharmacies.length > 0) {
+            query.id_object = { $in: pharmacies.map(c => c._id) };
+        }
+
+        const activities = all
+            ? await Activity.find(query).sort({ created_at: -1 })
+            : await Activity.find(query).sort({ created_at: -1 }).limit(10);
+
+        const validAuthorIds = activities?.map(act => act.author).filter(id => mongoose.Types.ObjectId.isValid(id)) || [];
+
+        const users = validAuthorIds.length > 0
+            ? await Admin.find({ _id: { $in: validAuthorIds } }).lean()
             : [];
-        const users = validAuthorIds.length > 0 ? await Admin.find({ _id: { $in: validAuthorIds } }).lean() : [];
+
         const usersMap = {};
         users.forEach(each => {
-            each.photoURL = each.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(each.name || 'User')}&background=random&size=500`;
+            const photoURL = each.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(each.name || 'User')}&background=random&size=500`;
+
             if (each._id && mongoose.Types.ObjectId.isValid(each._id)) {
                 usersMap[each._id] = {
-                    'name' : each._id.toString() == user._id.toString() ? 'Vous' : each.name+' '+each.surname,
-                    'img' : each.photoURL
+                    name: each._id.toString() === user._id.toString() ? 'Vous' : `${each.name} ${each.surname ?? ''}`.trim(),
+                    img: photoURL,
                 };
             }
         });
-        return res.status(200).json({'error':0, usersMap: usersMap, data: activities, user: user });
+
+        return res.status(200).json({ error: 0, usersMap, data: activities, user });
     } catch (error) {
         return res.status(500).json({ error: error.message });
     }
@@ -3617,12 +3632,12 @@ const loadHistoricMiniChat = async (req, res) => {
         var user = the_admin.the_user;
         user.photoURL =  user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
 
-        const { pharmacyId } = req.body;
+        let { pharmacyId, iD } = req.body;
 
-        const pharmacy = pharmacyId ? await Pharmacy.findOne({_id: pharmacyId}) : false;
+        const pharmacy = pharmacyId ? await Pharmacy.findOne({_id: pharmacyId}) : ( iD ? await Pharmacy.findOne({_id: iD}) : false);
 
         if (!pharmacy) {
-            res.status(200).json({ 'error':0, message:'La pharmacie n\'existe pas!' });
+            return res.status(200).json({ 'error':0, message:'La pharmacie n\'existe pas!' });
         }
 
         const messages = await MiniChatMessage.find({for: pharmacy._id}).populate('attachments');
@@ -4260,9 +4275,9 @@ const pharmacyUsersCreate = async (req, res) => {
             return res.status(200).json({ error: 1, success: false, message: 'Vous n\'avez pas les permissions nécessaires', errorMessage: 'Vous n\'avez pas les permissions nécessaires' });
         }
 
-        query.email = new RegExp(email, 'i');
-        query.name = new RegExp(name, 'i'); 
-        query.surname = new RegExp(surname, 'i');
+        query.email = email.replace(/\s+/g, '').trim();
+        query.name = name.replace(/\s+/g, '').trim();; 
+        query.surname = surname.replace(/\s+/g, '').trim();;
 
         // Check if email already exists
         const existingUser = await Admin.find(query);
@@ -4308,7 +4323,7 @@ const pharmacyUsersCreate = async (req, res) => {
         else{
             return res.status(200).json({ error: 1, success: false, message: 'Erreur creation de compte flutter!', errorMessage: 'Erreur creation de compte flutter!'});
         }
-        query.uid = [uuidObj._id];
+        query.uids = [uuidObj._id];
 
         if (address) { query.address = address;}
 

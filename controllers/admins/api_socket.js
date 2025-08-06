@@ -21,9 +21,9 @@ const adminSocketRoutes = async (socket, adminNamespace) => {
         // Event: Join an room
         socket.on('je_rejoins_la_phamacie_conv', async (data) => {
             console.log(`🔄 Tentative de rejoindre la conversation:`);
-            const { pharmacyId } = data;
+            const { iD } = data;
             
-            if (!pharmacyId) {
+            if (!iD) {
                 console.error('❌ pharmacyId manquant');
                 socket.emit('error', { message: 'pharmacyId est requis' });
                 return;
@@ -31,9 +31,9 @@ const adminSocketRoutes = async (socket, adminNamespace) => {
 
             try {
                 // Vérifier que la pharmacie existe
-                const pharmacy = await Pharmacy.findById(pharmacyId);
+                const pharmacy = await Pharmacy.findById(iD);
                 if (!pharmacy) {
-                    console.error(`❌ Pharmacie non trouvée: ${pharmacyId}`);
+                    console.error(`❌ Pharmacie non trouvée: ${iD}`);
                     socket.emit('error', { message: 'Pharmacie non trouvée' });
                     return;
                 }
@@ -48,23 +48,23 @@ const adminSocketRoutes = async (socket, adminNamespace) => {
                 });
                 
                 // Rejoindre la nouvelle room
-                const roomName = `pharmacy_${pharmacyId}`;
+                const roomName = `pharmacy_${iD}`;
                 socket.join(roomName);
                 
-                console.log(`👤 Admin ${socket.user.uid} a rejoint la conversation ${pharmacyId} (room: ${roomName})`);
+                console.log(`👤 Admin ${socket.user.uid} a rejoint la conversation ${iD} (room: ${roomName})`);
                 
                 // Notifier les autres dans la room
                 adminNamespace.to(roomName).emit('user_joined', {
                     userId: socket.user.uid,
                     userName: socket.the_user.name,
                     userType: 'admin',
-                    pharmacyId: pharmacyId,
+                    iD: iD,
                     timestamp: new Date()
                 });
 
                 // // Confirmer la connexion à l'admin
                 socket.emit('user_joined', {
-                    pharmacyId: pharmacyId,
+                    iD: iD,
                     roomName: roomName,
                     timestamp: new Date()
                 });
@@ -80,50 +80,50 @@ const adminSocketRoutes = async (socket, adminNamespace) => {
 
         // // Event: Quitter une conversation de pharmacie
         socket.on('leave_pharmacy_chat', (data) => {
-            const { pharmacyId } = data;
+            const { iD } = data;
             
-            if (!pharmacyId) {
+            if (!iD) {
                 socket.emit('error', { message: 'pharmacyId est requis' });
                 return;
             }
 
-            const roomName = `pharmacy_${pharmacyId}`;
+            const roomName = `pharmacy_${iD}`;
             
             socket.leave(roomName);
-            console.log(`👋 Admin ${socket.user.uid} a quitté la conversation ${pharmacyId}`);
+            console.log(`👋 Admin ${socket.user.uid} a quitté la conversation ${iD}`);
             
             socket.to(roomName).emit('user_left', {
                 userId: socket.user.uid,
                 userName: socket.the_user.name,
                 userType: 'admin',
-                pharmacyId: pharmacyId,
+                iD: iD,
                 timestamp: new Date()
             });
 
             socket.emit('left_pharmacy_chat', {
-                pharmacyId: pharmacyId,
+                iD: iD,
                 timestamp: new Date()
             });
         });
 
         // Event: Envoyer un message
         socket.on('send_message', async (data) => {
-            const { pharmacyId, message = {}, attachments } = data;
+            const { iD, message = {}, attachments } = data;
 
-            if (!pharmacyId) {
+            if (!iD) {
                 socket.emit('error', { message: 'pharmacyId est requis' });
                 return;
             }
 
             try {
-                const pharmacy = await Pharmacy.findById(pharmacyId);
+                const pharmacy = await Pharmacy.findById(iD);
                 if (!pharmacy) {
                     console.error('❌ Erreur : La pharmacie n\'existe pas');
                     socket.emit('error', { message: 'Erreur : La pharmacie n\'existe pas' });
                     return;
                 }
 
-                const roomName = `pharmacy_${pharmacyId}`;
+                const roomName = `pharmacy_${iD}`;
 
                 // Traitement des attachments
                 var attsMess = [];
@@ -143,9 +143,10 @@ const adminSocketRoutes = async (socket, adminNamespace) => {
                 });
 
                 if (attachments) {
-                    const fileee = await File.findOne({_id: attachments});
+                    console.log(attachments)
+                    const fileee = await File.find({_id: { $in: attachments }});
                     if (fileee) {
-                        newMessage.attachments = fileee._id;
+                        newMessage.attachments = fileee.map(fiiile => fiiile._id);
                     }
                 }
                 await newMessage.save();
@@ -155,7 +156,7 @@ const adminSocketRoutes = async (socket, adminNamespace) => {
 
                 adminNamespace.to(roomName).emit('new_message', {
                     message: plainMessage,
-                    pharmacyId: pharmacyId
+                    iD: iD
                 });
 
                 // Confirmer l'envoi à l'expéditeur
@@ -174,29 +175,29 @@ const adminSocketRoutes = async (socket, adminNamespace) => {
 
         // // Event: Indicateur de frappe
         socket.on('typing', (data) => {
-            const { pharmacyId, isTyping, userType } = data;
+            const { iD, isTyping, userType } = data;
             
-            if (!pharmacyId) {
-                socket.emit('error', { message: 'pharmacyId est requis' });
+            if (!iD) {
+                socket.emit('error', { message: 'iD est requis' });
                 return;
             }
 
-            const roomName = `pharmacy_${pharmacyId}`;
+            const roomName = `pharmacy_${iD}`;
 
             socket.to(roomName).emit('user_typing', {
                 userId: socket.user.uid,
                 userName: socket.the_user.name,
                 userType: userType,
-                pharmacyId: pharmacyId,
+                iD: iD,
                 isTyping: isTyping
             });
         });
 
         // Event: Marquer les messages comme lus
         socket.on('mark_as_read', async (data) => {
-            const { pharmacyId } = data;
+            const { iD } = data;
 
-            if (!pharmacyId) {
+            if (!iD) {
                 socket.emit('error', { message: 'pharmacyId est requis' });
                 return;
             }
@@ -205,7 +206,7 @@ const adminSocketRoutes = async (socket, adminNamespace) => {
                 // Marquer tous les messages de cette pharmacie comme lus pour cet admin
                 const updateResult = await MiniChatMessage.updateMany(
                     { 
-                        for: pharmacyId,
+                        for: iD,
                         senderType: { $ne: 'admin' },
                         seen: false 
                     },
@@ -215,19 +216,19 @@ const adminSocketRoutes = async (socket, adminNamespace) => {
                     }
                 );
 
-                const roomName = `pharmacy_${pharmacyId}`;
+                const roomName = `pharmacy_${iD}`;
                 socket.to(roomName).emit('messages_read', {
-                    pharmacyId: pharmacyId,
+                    iD: iD,
                     userId: socket.user.uid,
                     readCount: updateResult.modifiedCount
                 });
 
                 socket.emit('marked_as_read', {
-                    pharmacyId: pharmacyId,
+                    iD: iD,
                     readCount: updateResult.modifiedCount
                 });
 
-                console.log(`✅ ${updateResult.modifiedCount} messages marqués comme lus par admin ${socket.user.uid} pour ${pharmacyId}`);
+                console.log(`✅ ${updateResult.modifiedCount} messages marqués comme lus par admin ${socket.user.uid} pour ${iD}`);
 
             } catch (error) {
                 console.error('❌ Erreur lors du marquage comme lu:', error);
@@ -237,9 +238,9 @@ const adminSocketRoutes = async (socket, adminNamespace) => {
 
         // Event: Supprimer un message (admin uniquement)
         socket.on('delete_message', async (data) => {
-            const { pharmacyId, messageId } = data;
+            const { iD, messageId } = data;
 
-            if (!pharmacyId || !messageId) {
+            if (!iD || !messageId) {
                 socket.emit('error', { message: 'pharmacyId et messageId sont requis' });
                 return;
             }
@@ -247,7 +248,7 @@ const adminSocketRoutes = async (socket, adminNamespace) => {
             try {
                 const message = await MiniChatMessage.findOne({
                     _id: messageId,
-                    for: pharmacyId,
+                    for: iD,
                     senderId: socket.user.uid,
                     senderType: 'admin'
                 });
@@ -262,16 +263,16 @@ const adminSocketRoutes = async (socket, adminNamespace) => {
                 message.deletedAt = new Date();
                 await message.save();
 
-                const roomName = `pharmacy_${pharmacyId}`;
+                const roomName = `pharmacy_${iD}`;
                 adminNamespace.to(roomName).emit('message_deleted', {
                     messageId: messageId,
-                    pharmacyId: pharmacyId,
+                    id: iD,
                     deletedBy: socket.user.uid
                 });
 
                 socket.emit('message_deleted_confirm', {
                     messageId: messageId,
-                    pharmacyId: pharmacyId
+                    iD: iD
                 });
 
                 console.log(`🗑️ Message supprimé par admin ${socket.user.uid}: ${messageId}`);
@@ -289,12 +290,12 @@ const adminSocketRoutes = async (socket, adminNamespace) => {
             const rooms = Array.from(socket.rooms);
             rooms.forEach(room => {
                 if (room.startsWith('pharmacy_')) {
-                    const pharmacyId = room.replace('pharmacy_', '');
+                    const iD = room.replace('pharmacy_', '');
                     socket.to(room).emit('user_left', {
                         userId: socket.user.uid,
                         userName: socket.the_user.name,
                         userType: 'admin',
-                        pharmacyId: pharmacyId,
+                        iD: iD,
                         timestamp: new Date()
                     });
                 }
