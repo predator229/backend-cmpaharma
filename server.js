@@ -29,6 +29,7 @@ const { createAuthMiddleware } = require('@middlewares/auth');
 const deliverSocketRoutes = require('@routes/delivers/api_socket');
 const adminSocketRoutes = require('@controllers/admins/api_socket');
 const internalMessagingSocketRoutes = require('@controllers/admins/api_socket_conversation');
+const ticketSocketRoutes = require('@controllers/admins/api_socket_ticket');
 
 const app = express();
 const PORT = process.env.PORT || 5050;
@@ -251,7 +252,8 @@ const connectWithRetry = () => {
         const deliverNamespace = io.of('/deliver');
         const chatpharmacyParams = io.of('/admin/websocket/pharmacy_contact_admin');
         const conversationNamespace = io.of('/admin/websocket/internal_messaging');
-
+        const ticketNamespace = io.of('/admin/websocket/ticketing');
+        
         const { verifyFirebaseSocketToken: deliverVerifyFirebaseSocketToken } = createAuthMiddleware('deliver');
         const { verifyFirebaseSocketToken: adminVerifyFirebaseSocketToken } = createAuthMiddleware('admin');
 
@@ -269,6 +271,11 @@ const connectWithRetry = () => {
         conversationNamespace.use(adminVerifyFirebaseSocketToken);
         conversationNamespace.on('connection', async (socket) => {
           internalMessagingSocketRoutes(socket, conversationNamespace);
+        });
+
+        ticketNamespace.use(adminVerifyFirebaseSocketToken);
+        ticketNamespace.on('connection', async (socket) => {
+          ticketSocketRoutes(socket, ticketNamespace);
         });
 
         server.listen(PORT, () => {

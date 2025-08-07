@@ -278,7 +278,6 @@ const internalMessagingSocketRoutes = async (socket, internalNamespace) => {
           isDeleted: false,
           seen: false,
         });
-            console.log('damiennnn', data)
 
         if (attachments) {
             

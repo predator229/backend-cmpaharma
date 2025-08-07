@@ -58,7 +58,17 @@ const { authentificateUser,
     usersActivities,
     loadConversations,
     createConversation,
-    loadMessages
+    loadMessages,
+    getTicketsList,
+    getTicketById,
+    createTicket,
+    updateTicket,
+    deleteTicket,
+    sendMessage,
+    markMessageAsRead,
+    getTicketTemplates,
+    getTicketStats,
+    uploadTicketAttachment
 } = require('@controllers/admins/api');
 
 const {checkPharmacyInfo, checkPharmacyOwnerInfo} = require('@controllers/guest/api');
@@ -166,14 +176,26 @@ router.post('/managers/pharmacies/activities', deliververifyFirebaseToken, pharm
     router.post('/pharmacy-management/groups/manage',deliververifyFirebaseToken, pharmacyGroupsManage);
     
 //tools
-router.post('/tools/get-countries-list' , getListCountries);
-router.post('/tools/activities', deliververifyFirebaseToken, AllPharmacieActivities);
+    router.post('/tools/get-countries-list' , getListCountries);
+    router.post('/tools/activities', deliververifyFirebaseToken, AllPharmacieActivities);
+
+
+    router.post('/tools/tickets/list', deliververifyFirebaseToken, getTicketsList);
+    router.post('/tools/tickets/listById', deliververifyFirebaseToken, getTicketById);
+    router.post('/tools/tickets/create', deliververifyFirebaseToken, createTicket);
+    router.post('/tools/tickets/update', deliververifyFirebaseToken, updateTicket);
+    router.post('/tools/tickets/delete', deliververifyFirebaseToken, deleteTicket);
+    router.post('/tools/tickets/sendMessage', deliververifyFirebaseToken, sendMessage);
+    router.post('/tools/tickets/messages/read', deliververifyFirebaseToken, markMessageAsRead);
+    router.post('/tools/tickets/templates', deliververifyFirebaseToken, getTicketTemplates);
+    router.post('/tools/tickets/stats', deliververifyFirebaseToken, getTicketStats);
+    router.post('/tools/tickets/upload', deliververifyFirebaseToken, uploadTicketAttachment);
 
 //mini-chat
-router.post('/chat/pharmacy/messages', deliververifyFirebaseToken, loadHistoricMiniChat);
-router.post('/chat/pharmacy/messages/conversation', deliververifyFirebaseToken, loadConversations);
-router.post('/chat/pharmacy/messages/conversation/create', deliververifyFirebaseToken, createConversation);
-router.post('/chat/pharmacy/messages/conversation/loadMessage', deliververifyFirebaseToken, loadMessages);
+    router.post('/chat/pharmacy/messages', deliververifyFirebaseToken, loadHistoricMiniChat);
+    router.post('/chat/pharmacy/messages/conversation', deliververifyFirebaseToken, loadConversations);
+    router.post('/chat/pharmacy/messages/conversation/create', deliververifyFirebaseToken, createConversation);
+    router.post('/chat/pharmacy/messages/conversation/loadMessage', deliververifyFirebaseToken, loadMessages);
 
 
 module.exports = router;

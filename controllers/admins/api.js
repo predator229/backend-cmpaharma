@@ -23,6 +23,12 @@ const Category = require('@models/Category');
 const Product = require('@models/Product');
 const Permission = require('@models/Permission');
 const Conversation = require('@models/Conversation');
+const Ticket = require('@models/Ticket');
+const TicketTemplate = require('@models/TicketTemplate');
+const TicketMessage = require('@models/TicketMessage');
+
+const TicketStats = require('@tools/TicketStats');
+
 const path = require('path');
 
 const Group = require('@models/Group');
@@ -4416,7 +4422,6 @@ const pharmacyUsersCreate = async (req, res) => {
         });
     }
 };
-
 const pharmacyPermissionsList = async (req, res) => {
     try{
 
@@ -4515,7 +4520,6 @@ const pharmacyGroupsList = async (req, res) => {
         });
     }
 }
-
 const pharmacyGroupsJoin = async (req, res) => {
     try{
         const { id } = req.body;
@@ -4572,7 +4576,6 @@ const pharmacyGroupsJoin = async (req, res) => {
         });
     }
 }
-
 const pharmacyGroupsLeave = async (req, res) => {
     try{
         const { id } = req.body;
@@ -5119,7 +5122,793 @@ const loadMessages = async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
 };
+const generateTicketNumber = async () => {
+  const date = new Date();
+  const year = date.getFullYear().toString().slice(-2);
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  
+  let counter = 1;
+  let ticketNumber;
+  
+  do {
+    const counterStr = String(counter).padStart(4, '0');
+    ticketNumber = `TK${year}${month}${day}${counterStr}`;
+    
+    const existing = await Ticket.findOne({ ticketNumber });
+    if (!existing) break;
+    
+    counter++;
+  } while (counter <= 9999);
+  
+  return ticketNumber;
+};
 
+// Fonction utilitaire pour calculer les statistiques
+const calculateTicketStats = async (userPharmacies) => {
+  try {
+    const query = { pharmacy: { $in: userPharmacies } };
+    
+    const [
+      total,
+      open,
+      inProgress,
+      resolved,
+      closed,
+      pending,
+      priorityStats,
+      categoryStats,
+      unreadMessages
+    ] = await Promise.all([
+      Ticket.countDocuments(query),
+      Ticket.countDocuments({ ...query, status: 'open' }),
+      Ticket.countDocuments({ ...query, status: 'in_progress' }),
+      Ticket.countDocuments({ ...query, status: 'resolved' }),
+      Ticket.countDocuments({ ...query, status: 'closed' }),
+      Ticket.countDocuments({ ...query, status: 'pending' }),
+      
+      // Stats par priorité
+      Ticket.aggregate([
+        { $match: query },
+        { $group: { _id: '$priority', count: { $sum: 1 } } }
+      ]),
+      
+      // Stats par catégorie
+      Ticket.aggregate([
+        { $match: query },
+        { $group: { _id: '$category', count: { $sum: 1 } } }
+      ]),
+      
+      // Messages non lus
+      TicketMessage.aggregate([
+        {
+          $lookup: {
+            from: 'tickets',
+            localField: '_id',
+            foreignField: 'messages',
+            as: 'ticket'
+          }
+        },
+        {
+          $match: {
+            seen: false,
+            'ticket.pharmacy': { $in: userPharmacies }
+          }
+        },
+        { $count: 'total' }
+      ])
+    ]);
+
+    // Formatage des résultats
+    const byPriority = { low: 0, medium: 0, high: 0, urgent: 0 };
+    priorityStats.forEach(stat => {
+      byPriority[stat._id] = stat.count;
+    });
+
+    const byCategory = { technical: 0, billing: 0, account: 0, feature_request: 0, bug_report: 0, general: 0 };
+    categoryStats.forEach(stat => {
+      byCategory[stat._id] = stat.count;
+    });
+
+    // Temps moyen de résolution (à implémenter selon vos besoins)
+    const resolvedTickets = await Ticket.find({ 
+      ...query, 
+      status: 'resolved', 
+      resolvedAt: { $exists: true } 
+    }).select('createdAt resolvedAt');
+    
+    let averageResolutionTime = 0;
+    if (resolvedTickets.length > 0) {
+      const totalTime = resolvedTickets.reduce((acc, ticket) => {
+        return acc + (new Date(ticket.resolvedAt) - new Date(ticket.createdAt));
+      }, 0);
+      averageResolutionTime = Math.round(totalTime / resolvedTickets.length / (1000 * 60 * 60)); // en heures
+    }
+
+    return {
+      total,
+      open,
+      inProgress,
+      resolved,
+      closed,
+      pending,
+      byPriority,
+      byCategory,
+      averageResolutionTime,
+      totalUnread: unreadMessages[0]?.total || 0
+    };
+
+  } catch (error) {
+    console.error('❌ Erreur calcul stats:', error);
+    throw error;
+  }
+};
+
+// Liste des tickets avec pagination et filtres
+const getTicketsList = async (req, res) => {
+  try {
+    const { page = 1, limit = 20, status, priority, category, assignedTo, pharmacy, search, dateFrom, dateTo } = req.body;
+
+        var the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error) { return res.status(404).json({ message: 'User not found' }); }
+        
+        const user = the_admin.the_user;
+        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+        
+    // Vérification des permissions
+    const hasTicketPermission = user?.groups?.some(g => 
+      ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant', 'admin'].includes(g.code)
+    );
+
+    if (!hasTicketPermission) {
+      return res.status(403).json({ 
+        error: 1, 
+        success: false, 
+        message: 'Vous n\'avez pas les permissions pour accéder aux tickets' 
+      });
+    }
+
+    // Construction de la query
+    let query = {};
+
+    // Filtrage par pharmacies gérées
+    const userPharmacies = user.pharmaciesManaged.map(pharm => pharm._id);
+    if (pharmacy && userPharmacies.includes(pharmacy)) {
+      query.pharmacy = pharmacy;
+    } else {
+      query.pharmacy = { $in: userPharmacies };
+    }
+
+    // Application des filtres
+    if (status) {
+      const statusArray = Array.isArray(status) ? status : status.split(',');
+      query.status = { $in: statusArray };
+    }
+
+    if (priority) {
+      const priorityArray = Array.isArray(priority) ? priority : priority.split(',');
+      query.priority = { $in: priorityArray };
+    }
+
+    if (category) {
+      const categoryArray = Array.isArray(category) ? category : category.split(',');
+      query.category = { $in: categoryArray };
+    }
+
+    if (assignedTo) {
+      query['assignedTo._id'] = assignedTo;
+    }
+
+    if (search) {
+      query.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+        { ticketNumber: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    if (dateFrom || dateTo) {
+      query.createdAt = {};
+      if (dateFrom) query.createdAt.$gte = new Date(dateFrom);
+      if (dateTo) query.createdAt.$lte = new Date(dateTo);
+    }
+
+    // Pagination
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const skip = (pageNum - 1) * limitNum;
+
+    // Exécution de la requête
+    const [tickets, total] = await Promise.all([
+      Ticket.find(query)
+        .populate([
+          { path: 'createdBy', select: 'name surname email photoURL' },
+          { path: 'pharmacy', select: 'name address' },
+          { path: 'assignedTo._id', select: 'name surname email photoURL' },
+          { path: 'attachments' },
+          { path: 'messages', populate: { path: 'author', select: 'name surname' } }
+        ])
+        .sort({ lastActivity: -1, createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      Ticket.countDocuments(query)
+    ]);
+
+    const totalPages = Math.ceil(total / limitNum);
+
+    return res.status(200).json({
+      error: 0,
+      success: true,
+      data: {
+        tickets,
+        total,
+        page: pageNum,
+        limit: limitNum,
+        totalPages
+      },
+      user
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur getTicketsList:', error);
+    return res.status(500).json({ error: error.message });
+  }
+};
+
+// Récupérer un ticket spécifique
+const getTicketById = async (req, res) => {
+  try {
+    const { ticketId, uid } = req.body;
+
+    if (!ticketId) {
+      return res.status(200).json({ 
+        error: 1, 
+        success: false, 
+        message: 'ID du ticket requis' 
+      });
+    }
+
+    const the_admin = await getTheCurrentUserOrFailed(req, res);
+    if (the_admin.error) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const user = the_admin.the_user;
+    const userPharmacies = user.pharmaciesManaged.map(pharm => pharm._id);
+
+    const ticket = await Ticket.findOne({
+      _id: ticketId,
+      pharmacy: { $in: userPharmacies }
+    })
+    .populate([
+      { path: 'createdBy', select: 'name surname email photoURL' },
+      { path: 'pharmacy', select: 'name address email phone' },
+      { path: 'assignedTo._id', select: 'name surname email photoURL' },
+      { path: 'attachments' },
+      { 
+        path: 'messages', 
+        populate: { 
+          path: 'author', 
+          select: 'name surname email photoURL' 
+        },
+        options: { sort: { createdAt: 1 } }
+      }
+    ]);
+
+    if (!ticket) {
+      return res.status(200).json({ 
+        error: 1, 
+        success: false, 
+        message: 'Ticket non trouvé ou accès refusé' 
+      });
+    }
+
+    return res.status(200).json({
+      error: 0,
+      success: true,
+      data: ticket,
+      user
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur getTicketById:', error);
+    return res.status(500).json({ error: error.message });
+  }
+};
+
+// Créer un nouveau ticket
+const createTicket = async (req, res) => {
+  try {
+    const { title, description, category = 'general', priority = 'medium', pharmacy, tags = [], uid } = req.body;
+
+    if (!title || !pharmacy || !uid) {
+      return res.status(200).json({ 
+        error: 1, 
+        success: false, 
+        message: 'Titre, pharmacie et utilisateur sont requis' 
+      });
+    }
+
+    const the_admin = await getTheCurrentUserOrFailed(req, res);
+    if (the_admin.error) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const user = the_admin.the_user;
+    const userPharmacies = user.pharmaciesManaged.map(pharm => pharm._id.toString());
+
+    // Vérification que la pharmacie est gérée par l'utilisateur
+    if (!userPharmacies.includes(pharmacy.toString())) {
+      return res.status(403).json({ 
+        error: 1, 
+        success: false, 
+        message: 'Vous n\'avez pas accès à cette pharmacie' 
+      });
+    }
+
+    // Génération du numéro de ticket
+    const ticketNumber = await generateTicketNumber();
+
+    // Création du ticket
+    const newTicket = new Ticket({
+      ticketNumber,
+      title: title.trim(),
+      description: description?.trim(),
+      category,
+      priority,
+      status: 'open',
+      createdBy: user._id,
+      pharmacy,
+      tags: Array.isArray(tags) ? tags : [],
+      messages: [],
+      lastActivity: new Date()
+    });
+
+    await newTicket.save();
+    await newTicket.populate([
+      { path: 'createdBy', select: 'name surname email photoURL' },
+      { path: 'pharmacy', select: 'name address email phone' }
+    ]);
+
+    // Enregistrer l'activité
+    await registerActivity('Ticket', newTicket._id, user._id, "Création Ticket", `Nouveau ticket créé : ${newTicket.title}`);
+
+    return res.status(200).json({
+      error: 0,
+      success: true,
+      message: 'Ticket créé avec succès',
+      data: newTicket,
+      user
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur createTicket:', error);
+    return res.status(500).json({ error: error.message });
+  }
+};
+
+// Mettre à jour un ticket
+const updateTicket = async (req, res) => {
+  try {
+    const { ticketId, uid, updates } = req.body;
+
+    if (!ticketId || !uid || !updates) {
+      return res.status(200).json({ 
+        error: 1, 
+        success: false, 
+        message: 'ID du ticket, utilisateur et mises à jour requis' 
+      });
+    }
+
+    const the_admin = await getTheCurrentUserOrFailed(req, res);
+    if (the_admin.error) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const user = the_admin.the_user;
+    const userPharmacies = user.pharmaciesManaged.map(pharm => pharm._id);
+
+    const ticket = await Ticket.findOne({
+      _id: ticketId,
+      pharmacy: { $in: userPharmacies }
+    });
+
+    if (!ticket) {
+      return res.status(200).json({ 
+        error: 1, 
+        success: false, 
+        message: 'Ticket non trouvé ou accès refusé' 
+      });
+    }
+
+    // Champs autorisés à la mise à jour
+    const allowedFields = ['title', 'description', 'category', 'priority', 'status', 'assignedTo', 'tags', 'estimatedResolution'];
+    const updateFields = [];
+
+    // Application des mises à jour
+    for (const [field, value] of Object.entries(updates)) {
+      if (allowedFields.includes(field) && value !== undefined) {
+        if (field === 'status' && value === 'resolved' && !ticket.resolvedAt) {
+          ticket.resolvedAt = new Date();
+        }
+        if (field === 'status' && value === 'closed' && !ticket.closedAt) {
+          ticket.closedAt = new Date();
+        }
+        
+        ticket[field] = value;
+        updateFields.push(field);
+      }
+    }
+
+    ticket.lastActivity = new Date();
+    await ticket.save();
+
+    await ticket.populate([
+      { path: 'createdBy', select: 'name surname email photoURL' },
+      { path: 'pharmacy', select: 'name address email phone' },
+      { path: 'assignedTo._id', select: 'name surname email photoURL' }
+    ]);
+
+    // Enregistrer l'activité
+    if (updateFields.length > 0) {
+      await registerActivity('Ticket', ticket._id, user._id, "Mise à jour Ticket", `Ticket mis à jour : ${updateFields.join(', ')}`);
+    }
+
+    return res.status(200).json({
+      error: 0,
+      success: true,
+      message: 'Ticket mis à jour avec succès',
+      data: ticket,
+      user
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur updateTicket:', error);
+    return res.status(500).json({ error: error.message });
+  }
+};
+
+// Supprimer un ticket
+const deleteTicket = async (req, res) => {
+  try {
+    const { ticketId, uid } = req.body;
+
+    if (!ticketId || !uid) {
+      return res.status(200).json({ 
+        error: 1, 
+        success: false, 
+        message: 'ID du ticket et utilisateur requis' 
+      });
+    }
+
+    const the_admin = await getTheCurrentUserOrFailed(req, res);
+    if (the_admin.error) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const user = the_admin.the_user;
+    const userPharmacies = user.pharmaciesManaged.map(pharm => pharm._id);
+
+    const ticket = await Ticket.findOne({
+      _id: ticketId,
+      pharmacy: { $in: userPharmacies }
+    });
+
+    if (!ticket) {
+      return res.status(200).json({ 
+        error: 1, 
+        success: false, 
+        message: 'Ticket non trouvé ou accès refusé' 
+      });
+    }
+
+    // Suppression des messages associés
+    await TicketMessage.deleteMany({ _id: { $in: ticket.messages } });
+
+    // Suppression du ticket
+    await Ticket.findByIdAndDelete(ticketId);
+
+    // Enregistrer l'activité
+    await registerActivity('Ticket', ticketId, user._id, "Suppression Ticket", `Ticket supprimé : ${ticket.title}`);
+
+    return res.status(200).json({
+      error: 0,
+      success: true,
+      message: 'Ticket supprimé avec succès',
+      user
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur deleteTicket:', error);
+    return res.status(500).json({ error: error.message });
+  }
+};
+
+// Envoyer un message dans un ticket
+const sendMessage = async (req, res) => {
+  try {
+    const { ticketId, content, attachments = [], isInternal = false } = req.body;
+
+    if (!ticketId || !content) {
+      return res.status(200).json({ 
+        error: 1, 
+        success: false, 
+        message: 'ID du ticket, contenu et auteur requis' 
+      });
+    }
+
+    const the_admin = await getTheCurrentUserOrFailed(req, res);
+    if (the_admin.error) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const user = the_admin.the_user;
+    const userPharmacies = user.pharmaciesManaged.map(pharm => pharm._id);
+
+    const ticket = await Ticket.findOne({
+      _id: ticketId,
+      pharmacy: { $in: userPharmacies }
+    });
+
+    if (!ticket) {
+      return res.status(200).json({ 
+        error: 1, 
+        success: false, 
+        message: 'Ticket non trouvé ou accès refusé' 
+      });
+    }
+
+    // Création du message
+    const newMessage = new TicketMessage({
+      content: content.trim(),
+      author: user._id,
+      attachments: Array.isArray(attachments) ? attachments : [],
+      isInternal,
+      seen: false
+    });
+
+    await newMessage.save();
+    await newMessage.populate([
+      { path: 'author', select: 'name surname email photoURL' },
+      { path: 'attachments' }
+    ]);
+
+    // Mise à jour du ticket
+    ticket.messages.push(newMessage._id);
+    ticket.lastActivity = new Date();
+    await ticket.save();
+
+    // Enregistrer l'activité
+    await registerActivity('Ticket', ticket._id, user._id, "Nouveau Message", `Message ajouté au ticket ${ticket.ticketNumber}`);
+
+    return res.status(200).json({
+      error: 0,
+      success: true,
+      message: 'Message envoyé avec succès',
+      data: newMessage,
+      user
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur sendMessage:', error);
+    return res.status(500).json({ error: error.message });
+  }
+};
+
+// Marquer un message comme lu
+const markMessageAsRead = async (req, res) => {
+  try {
+    const { ticketId, messageId, uid } = req.body;
+
+    if (!ticketId || !messageId || !uid) {
+      return res.status(200).json({ 
+        error: 1, 
+        success: false, 
+        message: 'ID du ticket, message et utilisateur requis' 
+      });
+    }
+
+    const the_admin = await getTheCurrentUserOrFailed(req, res);
+    if (the_admin.error) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const user = the_admin.the_user;
+    const userPharmacies = user.pharmaciesManaged.map(pharm => pharm._id);
+
+    // Vérifier l'accès au ticket
+    const ticket = await Ticket.findOne({
+      _id: ticketId,
+      pharmacy: { $in: userPharmacies }
+    });
+
+    if (!ticket) {
+      return res.status(200).json({ 
+        error: 1, 
+        success: false, 
+        message: 'Ticket non trouvé ou accès refusé' 
+      });
+    }
+
+    // Marquer le message comme lu
+    const message = await TicketMessage.findById(messageId);
+    if (message && !message.seen) {
+      message.seen = true;
+      message.seenAt = new Date();
+      await message.save();
+    }
+
+    return res.status(200).json({
+      error: 0,
+      success: true,
+      message: 'Message marqué comme lu',
+      user
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur markMessageAsRead:', error);
+    return res.status(500).json({ error: error.message });
+  }
+};
+
+// Récupérer les templates de tickets
+const getTicketTemplates = async (req, res) => {
+  try {
+    const { uid } = req.body;
+
+    if (!uid) {
+      return res.status(200).json({ 
+        error: 1, 
+        success: false, 
+        message: 'Utilisateur requis' 
+      });
+    }
+
+    const the_admin = await getTheCurrentUserOrFailed(req, res);
+    if (the_admin.error) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const user = the_admin.the_user;
+
+    const templates = await TicketTemplate.find({ 
+      isActive: true 
+    })
+    .populate('createdBy', 'name surname')
+    .sort({ name: 1 });
+
+    return res.status(200).json({
+      error: 0,
+      success: true,
+      data: templates,
+      user
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur getTicketTemplates:', error);
+    return res.status(500).json({ error: error.message });
+  }
+};
+
+// Récupérer les statistiques des tickets
+const getTicketStats = async (req, res) => {
+  try {
+    const { uid } = req.body;
+
+    if (!uid) {
+      return res.status(200).json({ 
+        error: 1, 
+        success: false, 
+        message: 'Utilisateur requis' 
+      });
+    }
+
+    const the_admin = await getTheCurrentUserOrFailed(req, res);
+    if (the_admin.error) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const user = the_admin.the_user;
+    const userPharmacies = user.pharmaciesManaged.map(pharm => pharm._id);
+
+    const stats = await calculateTicketStats(userPharmacies);
+
+    return res.status(200).json({
+      error: 0,
+      success: true,
+      data: stats,
+      user
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur getTicketStats:', error);
+    return res.status(500).json({ error: error.message });
+  }
+};
+
+// Upload d'attachements pour tickets
+const uploadTicketAttachment = async (req, res) => {
+  try {
+    const { ticketId, uid, type_ = 'ticket_attachment' } = req.body;
+    const file = req.file;
+
+    if (!file || !ticketId || !uid) {
+      return res.status(200).json({ 
+        error: 1, 
+        success: false, 
+        message: 'Fichier, ID du ticket et utilisateur requis' 
+      });
+    }
+
+    const the_admin = await getTheCurrentUserOrFailed(req, res);
+    if (the_admin.error) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const user = the_admin.the_user;
+    const userPharmacies = user.pharmaciesManaged.map(pharm => pharm._id);
+
+    // Vérifier l'accès au ticket
+    const ticket = await Ticket.findOne({
+      _id: ticketId,
+      pharmacy: { $in: userPharmacies }
+    });
+
+    if (!ticket) {
+      return res.status(200).json({ 
+        error: 1, 
+        success: false, 
+        message: 'Ticket non trouvé ou accès refusé' 
+      });
+    }
+
+    const thetime = Date.now().toString();
+    const extension = file.originalname ? file.originalname.split('.').pop() : 'png';
+
+    // Créer le répertoire s'il n'existe pas
+    const uploadDir = path.join(__dirname, '../../uploads', ticketId, type_);
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    // Déplacer le fichier
+    const newFilePath = file.path.replace('uploads/', `uploads/${ticketId}/${type_}/`);
+    fs.renameSync(file.path, newFilePath);
+
+    // Créer l'enregistrement File
+    const fileRecord = new File({
+      originalName: file.originalname ?? `ticket_attachment_${thetime}`,
+      fileName: `${ticket.ticketNumber}_${type_}_${thetime}.${extension}`,
+      fileType: type_,
+      fileSize: file.size,
+      url: newFilePath,
+      extension: extension,
+      uploadedBy: user._id,
+      linkedTo: { model: "Ticket", objectId: ticket._id },
+      tags: ['ticket_attachment'],
+      isPrivate: true
+    });
+
+    await fileRecord.save();
+
+    // Enregistrer l'activité
+    await registerActivity('Ticket', ticket._id, user._id, "Fichier Ajouté", `Fichier ajouté au ticket ${ticket.ticketNumber}`);
+
+    return res.status(200).json({
+      error: 0,
+      success: true,
+      message: 'Fichier uploadé avec succès',
+      fileId: fileRecord._id,
+      data: fileRecord,
+      user
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur uploadTicketAttachment:', error);
+    return res.status(500).json({ error: error.message });
+  }
+};
 // Bulk actions endpoint
 const bulkUserActions = async (req, res) => {
     try {
@@ -5278,5 +6067,16 @@ module.exports = { authentificateUser,
     usersActivities,
     loadConversations,
     createConversation,
-    loadMessages
+    loadMessages,
+    getTicketsList,
+    getTicketById,
+    createTicket,
+    updateTicket,
+    deleteTicket,
+    sendMessage,
+    markMessageAsRead,
+    getTicketTemplates,
+    getTicketStats,
+    uploadTicketAttachment
+
 };
