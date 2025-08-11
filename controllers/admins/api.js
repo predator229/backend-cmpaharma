@@ -2354,7 +2354,7 @@ const productsActivities = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Produit non trouvé' });
         }
 
-        query = {};
+        let query = {};
         if (user_) { query.author = user_.toString(); }
         if (products) { query.id_object = { $in: products.map(c => c._id)}; }
         const activities = all ? await Activity.find(query).sort({ created_at: -1 }) : await Activity.find(query).sort({ created_at: -1 }).limit(parseInt(prePage) || 10);
@@ -5375,6 +5375,8 @@ const getTicketById = async (req, res) => {
     }
 
     const user = the_admin.the_user;
+    user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
     const userPharmacies = user.pharmaciesManaged.map(pharm => pharm._id);
 
     const ticket = await Ticket.findOne({
@@ -5382,16 +5384,17 @@ const getTicketById = async (req, res) => {
       pharmacy: { $in: userPharmacies }
     })
     .populate([
-      { path: 'createdBy', select: 'name surname email photoURL' },
-      { path: 'pharmacy', select: 'name address email phone' },
-      { path: 'assignedTo._id', select: 'name surname email photoURL' },
+      { path: 'createdBy'},
+      { path: 'pharmacy'},
+      { path: 'assignedTo._id'},
       { path: 'attachments' },
       { 
         path: 'messages', 
-        populate: { 
-          path: 'author', 
-          select: 'name surname email photoURL' 
-        },
+        populate: ([
+            { path: 'author'},
+            { path: 'attachments' },
+
+        ]),
         options: { sort: { createdAt: 1 } }
       }
     ]);
@@ -5403,12 +5406,28 @@ const getTicketById = async (req, res) => {
         message: 'Ticket non trouvé ou accès refusé' 
       });
     }
+    ticket.createdBy.photoURL = ticket.createdBy.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(ticket.createdBy.name || 'User')}&background=random&size=500`;
+    if (ticket.assignedTo && ticket.assignedTo._id) {
+      ticket.assignedTo._id.photoURL = ticket.assignedTo._id.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(ticket.assignedTo._id.name || 'User')}&background=random&size=500`;
+    }
+
+    const allAtachements = ticket.attachments || [];
+    if (Array.isArray(ticket.messages)) {
+      ticket.messages = ticket.messages.map(message => {
+        if (message && message.author) {
+          message.author.photoURL = message.author.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(message.author.name || 'User')}&background=random&size=500`;
+          allAtachements.push(...(message.attachments || []));
+        }
+        return message;
+      });
+    }
 
     return res.status(200).json({
       error: 0,
       success: true,
       data: ticket,
-      user
+      user,
+      allAtachements
     });
 
   } catch (error) {
@@ -5545,10 +5564,33 @@ const updateTicket = async (req, res) => {
     await ticket.save();
 
     await ticket.populate([
-      { path: 'createdBy', select: 'name surname email photoURL' },
-      { path: 'pharmacy', select: 'name address email phone' },
-      { path: 'assignedTo._id', select: 'name surname email photoURL' }
+      { path: 'createdBy'},
+      { path: 'pharmacy'},
+      { path: 'assignedTo._id'},
+      { path: 'attachments' },
+      { 
+        path: 'messages', 
+        populate: { 
+          path: 'author', 
+        },
+        options: { sort: { createdAt: 1 } }
+      }
     ]);
+
+    ticket.createdBy.photoURL = ticket.createdBy.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(ticket.createdBy.name || 'User')}&background=random&size=500`;
+    if (ticket.assignedTo && ticket.assignedTo._id) {
+      ticket.assignedTo._id.photoURL = ticket.assignedTo._id.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(ticket.assignedTo._id.name || 'User')}&background=random&size=500`;
+    }
+
+    if (Array.isArray(ticket.messages)) {
+      ticket.messages = ticket.messages.map(message => {
+        if (message && message.author) {
+          message.author.photoURL = message.author.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(message.author.name || 'User')}&background=random&size=500`;
+        }
+        return message;
+      });
+    }
+
 
     // Enregistrer l'activité
     if (updateFields.length > 0) {
@@ -5646,7 +5688,7 @@ const sendMessage = async (req, res) => {
     const user = the_admin.the_user;
     const userPharmacies = user.pharmaciesManaged.map(pharm => pharm._id);
 
-    const ticket = await Ticket.findOne({
+    let ticket = await Ticket.findOne({
       _id: ticketId,
       pharmacy: { $in: userPharmacies }
     });
@@ -5669,15 +5711,42 @@ const sendMessage = async (req, res) => {
     });
 
     await newMessage.save();
-    await newMessage.populate([
-      { path: 'author', select: 'name surname email photoURL' },
-      { path: 'attachments' }
-    ]);
-
+    // await newMessage.populate([
+    //   { path: 'author' },
+    //   { path: 'attachments' }
+    // ]);
     // Mise à jour du ticket
     ticket.messages.push(newMessage._id);
     ticket.lastActivity = new Date();
     await ticket.save();
+
+    await ticket.populate([
+      { path: 'createdBy'},
+      { path: 'pharmacy'},
+      { path: 'assignedTo._id'},
+      { path: 'attachments' },
+      { 
+        path: 'messages', 
+        populate: { 
+          path: 'author', 
+        },
+        options: { sort: { createdAt: 1 } }
+      }
+    ]);
+
+    ticket.createdBy.photoURL = ticket.createdBy.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(ticket.createdBy.name || 'User')}&background=random&size=500`;
+    if (ticket.assignedTo && ticket.assignedTo._id) {
+      ticket.assignedTo._id.photoURL = ticket.assignedTo._id.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(ticket.assignedTo._id.name || 'User')}&background=random&size=500`;
+    }
+
+    if (Array.isArray(ticket.messages)) {
+      ticket.messages = ticket.messages.map(message => {
+        if (message && message.author) {
+          message.author.photoURL = message.author.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(message.author.name || 'User')}&background=random&size=500`;
+        }
+        return message;
+      });
+    }
 
     // Enregistrer l'activité
     await registerActivity('Ticket', ticket._id, user._id, "Nouveau Message", `Message ajouté au ticket ${ticket.ticketNumber}`);
@@ -5829,7 +5898,7 @@ const getTicketStats = async (req, res) => {
 
 // Upload d'attachements pour tickets
 const uploadTicketAttachment = async (req, res) => {
-  try {
+  try { //damien
     const { ticketId, uid, type_ = 'ticket_attachment' } = req.body;
     const file = req.file;
 
@@ -5840,6 +5909,7 @@ const uploadTicketAttachment = async (req, res) => {
         message: 'Fichier, ID du ticket et utilisateur requis' 
       });
     }
+    req.body.type = "admin"
 
     const the_admin = await getTheCurrentUserOrFailed(req, res);
     if (the_admin.error) {
@@ -5892,6 +5962,10 @@ const uploadTicketAttachment = async (req, res) => {
 
     await fileRecord.save();
 
+    // Ajouter le fichier au ticket
+    ticket.attachments.push(fileRecord._id);
+    await ticket.save();
+
     // Enregistrer l'activité
     await registerActivity('Ticket', ticket._id, user._id, "Fichier Ajouté", `Fichier ajouté au ticket ${ticket.ticketNumber}`);
 
@@ -5906,6 +5980,92 @@ const uploadTicketAttachment = async (req, res) => {
 
   } catch (error) {
     console.error('❌ Erreur uploadTicketAttachment:', error);
+    return res.status(500).json({ error: error.message });
+  }
+};
+const uploadTicketMessageAttachment = async (req, res) => {
+  try {
+
+    const { ticketMessageId, uid, type_ = 'ticket_attachment' } = req.body;
+    const file = req.file;
+
+    if (!file || !ticketMessageId || !uid) {
+      return res.status(200).json({ 
+        error: 1, 
+        success: false, 
+        message: 'Fichier, ID du ticket et utilisateur requis' 
+      });
+    }
+    req.body.type = "admin"
+
+    const the_admin = await getTheCurrentUserOrFailed(req, res);
+    if (the_admin.error) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const user = the_admin.the_user;
+    const userPharmacies = user.pharmaciesManaged.map(pharm => pharm._id);
+
+    // Vérifier l'accès au ticket
+    const ticketmessage = await TicketMessage.findOne({
+      _id: ticketMessageId,
+    });
+
+    if (!ticketmessage) {
+      return res.status(200).json({ 
+        error: 1, 
+        success: false, 
+        message: 'Ticket non trouvé ou accès refusé hehe' 
+      });
+    }
+
+    const thetime = Date.now().toString();
+    const extension = file.originalname ? file.originalname.split('.').pop() : 'png';
+
+    // Créer le répertoire s'il n'existe pas
+    const uploadDir = path.join(__dirname, '../../uploads', ticketMessageId, type_);
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    // Déplacer le fichier
+    const newFilePath = file.path.replace('uploads/', `uploads/${ticketMessageId}/${type_}/`);
+    fs.renameSync(file.path, newFilePath);
+
+    // Créer l'enregistrement File
+    const fileRecord = new File({
+      originalName: file.originalname ?? `ticket_message_attachment_${thetime}`,
+      fileName: `${ticketmessage.ticketNumber}_${type_}_${thetime}.${extension}`,
+      fileType: type_,
+      fileSize: file.size,
+      url: newFilePath,
+      extension: extension,
+      uploadedBy: user._id,
+      linkedTo: { model: "Ticket", objectId: ticketmessage._id },
+      tags: ['ticket_message_attachment_'],
+      isPrivate: true
+    });
+
+    await fileRecord.save();
+
+    // Ajouter le fichier au ticket
+    ticketmessage.attachments.push(fileRecord._id);
+    await ticketmessage.save();
+
+    // Enregistrer l'activité
+    await registerActivity('Ticket', ticketmessage._id, user._id, "Fichier Ajouté", `Fichier ajouté au message du ticket`);
+
+    return res.status(200).json({
+      error: 0,
+      success: true,
+      message: 'Fichier uploadé avec succès',
+      fileId: fileRecord._id,
+      data: fileRecord,
+      user
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur uploadTicketMessageAttachment:', error);
     return res.status(500).json({ error: error.message });
   }
 };
@@ -6077,6 +6237,7 @@ module.exports = { authentificateUser,
     markMessageAsRead,
     getTicketTemplates,
     getTicketStats,
-    uploadTicketAttachment
+    uploadTicketAttachment,
+    uploadTicketMessageAttachment
 
 };

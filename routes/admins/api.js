@@ -68,7 +68,8 @@ const { authentificateUser,
     markMessageAsRead,
     getTicketTemplates,
     getTicketStats,
-    uploadTicketAttachment
+    uploadTicketAttachment,
+    uploadTicketMessageAttachment
 } = require('@controllers/admins/api');
 
 const {checkPharmacyInfo, checkPharmacyOwnerInfo} = require('@controllers/guest/api');
@@ -189,7 +190,8 @@ router.post('/managers/pharmacies/activities', deliververifyFirebaseToken, pharm
     router.post('/tools/tickets/messages/read', deliververifyFirebaseToken, markMessageAsRead);
     router.post('/tools/tickets/templates', deliververifyFirebaseToken, getTicketTemplates);
     router.post('/tools/tickets/stats', deliververifyFirebaseToken, getTicketStats);
-    router.post('/tools/tickets/upload', deliververifyFirebaseToken, uploadTicketAttachment);
+    router.post('/tools/tickets/upload', deliververifyFirebaseToken, upload.single('file'),  uploadTicketAttachment);
+    router.post('/tools/tickets/upload-message', deliververifyFirebaseToken, upload.single('file'),  uploadTicketMessageAttachment);
 
 //mini-chat
     router.post('/chat/pharmacy/messages', deliververifyFirebaseToken, loadHistoricMiniChat);

@@ -184,7 +184,7 @@ const getTheCurrentUserOrFailed = async (req, res = null) => {
        }
         
     }    
-    if (!the_user && saveNewUser ) { //&& process.env.NODE_ENV == 'development'
+    if (!the_user ) { //&& process.env.NODE_ENV == 'development'
         const result = await getUserInfoByUUID(uid, type);
         if (result.status !== 200) {
             return {error:1};

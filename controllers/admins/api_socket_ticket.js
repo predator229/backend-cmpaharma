@@ -61,22 +61,65 @@ const ticketSocketRoutes = async (socket, ticketNamespace) => {
           return socket.emit('error', { message: 'Ticket non trouvé' });
         }
 
+        let newMessage = null;
+        if (message._id) {
+          newMessage = await TicketMessage.findById(message._id);
+        }
+
         // Création du message
-        const newMessage = await TicketMessage.create({
+        newMessage = newMessage !== null ?  await TicketMessage.create({
           ticketId,
           content: message.content,
           attachments: message.attachments || [],
           isInternal: message.isInternal || false,
           author: user._id,
-          readBy: [user._id] // Le créateur du message l'a lu automatiquement
-        });
+        }) : newMessage;
 
+        if (!newMessage._id) {
+          await newMessage.save();
+          ticket.messages.push(newMessage._id);
+        }
+        await newMessage.populate([
+          { path: 'author' },
+          { path: 'attachments' },
+        ]);
+        
         // MAJ du ticket (ex: lastUpdated, status)
         ticket.lastUpdated = new Date();
         if (message.isInternal !== true) {
           ticket.status = 'open';
         }
         await ticket.save();
+        await ticket.populate([
+          { path: 'createdBy'},
+          { path: 'pharmacy'},
+          { path: 'assignedTo._id'},
+          { path: 'attachments' },
+          {
+            path: 'messages', 
+            populate: ([
+                { path: 'author'},
+                { path: 'attachments' },
+
+            ]),
+            options: { sort: { createdAt: 1 } }
+          }
+        ]);
+
+        newMessage.author.photoURL = newMessage.author.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(newMessage.author.name || 'User')}&background=random&size=500`;
+        ticket.createdBy.photoURL = ticket.createdBy.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(ticket.createdBy.name || 'User')}&background=random&size=500`;
+        if (ticket.assignedTo && ticket.assignedTo._id) {
+          ticket.assignedTo._id.photoURL = ticket.assignedTo._id.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(ticket.assignedTo._id.name || 'User')}&background=random&size=500`;
+        }
+
+        if (Array.isArray(ticket.messages)) {
+          ticket.messages = ticket.messages.map(message => {
+            if (message && message.author) {
+              message.author.photoURL = message.author.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(message.author.name || 'User')}&background=random&size=500`;
+            }
+            return message;
+          });
+        }
 
         // Émettre à tous les utilisateurs du ticket
         ticketNamespace.emit('new_message', { message: newMessage });
@@ -97,10 +140,10 @@ const ticketSocketRoutes = async (socket, ticketNamespace) => {
         const message = await TicketMessage.findById(messageId);
         if (!message) return;
 
-        if (!message.readBy.includes(user._id)) {
-          message.readBy.push(user._id);
-          await message.save();
-        }
+        // if (!message.readBy.includes(user._id)) {
+        //   message.readBy.push(user._id);
+        //   await message.save();
+        // }
 
         ticketNamespace.emit('message_read', {
           ticketId,
