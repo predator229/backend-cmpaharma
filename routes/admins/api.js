@@ -69,7 +69,8 @@ const { authentificateUser,
     getTicketTemplates,
     getTicketStats,
     uploadTicketAttachment,
-    uploadTicketMessageAttachment
+    uploadTicketMessageAttachment,
+    pharmaciesOrdersList
 } = require('@controllers/admins/api');
 
 const {checkPharmacyInfo, checkPharmacyOwnerInfo} = require('@controllers/guest/api');
@@ -156,12 +157,14 @@ router.post('/managers/pharmacies/activities', deliververifyFirebaseToken, pharm
     router.post('/pharmacy-management/products/search',deliververifyFirebaseToken, productsAdvancedSearch);
     router.post('/pharmacy-management/products/stats',deliververifyFirebaseToken, productsStats);
 
-    //Routes utilisateurs
+    //Routes pharmacies
     router.post('/pharmacy-management/users/list',deliververifyFirebaseToken, pharmacyUsersList);
     router.post('/pharmacy-management/users/detail',deliververifyFirebaseToken, pharmacyUsersDetail);
     router.post('/pharmacy-management/users/create',deliververifyFirebaseToken, pharmacyUsersCreate);
     router.post('/pharmacy-management/users/update-profile',deliververifyFirebaseToken, pharmacyUsersEditProfile);
     router.post('/pharmacy-management/users/activities',deliververifyFirebaseToken, usersActivities);
+
+    router.post('/pharmacy-management/orders/list',deliververifyFirebaseToken, pharmaciesOrdersList);
 
     //Routes permissions et groupes
     router.post('/pharmacy-management/permissions/list',deliververifyFirebaseToken, pharmacyPermissionsList);

@@ -6171,6 +6171,157 @@ const bulkUserActions = async (req, res) => {
         });
     }
 };
+
+
+const pharmaciesOrdersList = async (req, res) => {
+    try {
+        const { 
+            page = 1, 
+            limit = 10,
+            search,
+            status,
+            pharmacy,
+            sortBy = 'createdAt',
+            sortOrder = 'desc',
+            pharmaciesId
+        } = req.body;
+
+        // Récupérer l'utilisateur courant
+        const the_admin = await getTheCurrentUserOrFailed(req, res);
+        if (the_admin.error) { 
+            return res.status(404).json({ message: 'User not found' }); 
+        }
+        const user = the_admin.the_user;
+
+        // Photo par défaut
+        user.photoURL = user.photoURL ?? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=random&size=500`;
+
+        // Déterminer les pharmacies gérées
+        let pharmaciesManaged = user?.groups?.some(g => ['manager_pharmacy', 'pharmacien', 'preparateur', 'caissier', 'consultant'].includes(g.code))
+            ? user.pharmaciesManaged.map(pharm => pharm._id)
+            : [];
+
+        if (pharmacy && pharmaciesManaged.includes(pharmacy)) {
+            pharmaciesManaged = [pharmacy];
+        } else if (pharmaciesId) {
+            pharmaciesManaged = (Array.isArray(pharmaciesId) ? pharmaciesId : [pharmaciesId])
+                .filter(id => pharmaciesManaged.includes(id));
+        }
+
+        if (!pharmaciesManaged || pharmaciesManaged.length === 0) {
+            return res.status(200).json({ 
+                error: 1, 
+                success: false, 
+                message: 'Vous n\'avez aucune pharmacie !', 
+                errorMessage: 'Vous n\'avez aucune pharmacie !'
+            });
+        }
+
+        // Vérifier les permissions
+        const userPermissions = await loadAllPermissions(user, req, res);
+        if (!userPermissions.permissions?.includes('orders.view')) {
+            return res.status(200).json({ 
+                error: 1, 
+                success: false, 
+                message: 'Vous n\'avez pas les permissions nécessaires', 
+                errorMessage: 'Vous n\'avez pas les permissions nécessaires' 
+            });
+        }
+
+        // Construire la requête MongoDB
+        let query = { pharmacy: { $in: pharmaciesManaged } };
+
+        // Filtre par statut
+        if (status) {
+            query.status = status; // ex: "pending", "shipped", etc.
+        }
+
+        // Filtre recherche
+        if (search) {
+            const regex = new RegExp(search, 'i');
+            query.$or = [
+                { orderNumber: regex },
+                { 'customer.name': regex },
+                { 'customer.surname': regex },
+                { 'customer.email': regex },
+                { 'items.productName': regex }
+            ];
+        }
+
+        // Tri
+        const validSortFields = ['orderNumber', 'status', 'totalAmount', 'createdAt', 'updatedAt'];
+        const sortField = validSortFields.includes(sortBy) ? sortBy : 'createdAt';
+        const sortDirection = sortOrder === 'asc' ? 1 : -1;
+        let sortObject = { [sortField]: sortDirection };
+
+        // Pagination
+        const pageNum = Math.max(1, parseInt(page));
+        const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
+        const skip = (pageNum - 1) * limitNum;
+
+        // Compter et récupérer les commandes
+        const totalOrders = await Order.countDocuments(query);
+        const totalPages = Math.ceil(totalOrders / limitNum);
+
+        let orders = await Order.find(query)
+            .populate([
+                { path: 'pharmacy', select: 'name address' },
+                { path: 'customer', select: 'name surname email phone' },
+                { path: 'items.product', select: 'name price' }
+            ])
+            .sort(sortObject)
+            .skip(skip)
+            .limit(limitNum)
+            .lean();
+
+        // Enrichir les données
+        orders = orders.map(order => ({
+            ...order,
+            totalItems: order.items?.length || 0,
+            formattedTotal: `${order.totalAmount?.toFixed(2)} €`
+        }));
+
+        // Préparer la liste des pharmacies
+        const pharmaciesList = user?.pharmaciesManaged?.map(pharm => ({
+            value: pharm._id,
+            label: pharm.name
+        })) || [];
+
+        // Récupérer infos complètes des pharmacies
+        const pharmsFullInfos = await Pharmacy.find({ _id: { $in: pharmaciesManaged } })
+            .populate(['location', 'country', 'workingHours'])
+            .lean();
+
+        return res.status(200).json({
+            error: 0,
+            success: true,
+            user,
+            data: {
+                orders,
+                total: totalOrders,
+                page: pageNum,
+                limit: limitNum,
+                totalPages,
+                hasNextPage: pageNum < totalPages,
+                hasPrevPage: pageNum > 1
+            },
+            pharmaciesList,
+            pharmsFullInfos,
+            filters: { status, pharmacy, search },
+            sorting: { sortBy: sortField, sortOrder }
+        });
+
+    } catch (error) {
+        console.error('Error in pharmaciesOrdersList:', error);
+        return res.status(500).json({  
+            error: 1, 
+            success: false, 
+            message: 'Erreur serveur', 
+            errorMessage: error.message
+        });
+    }
+};
+
 module.exports = { authentificateUser,
     setProfilInfo,
     loadGeneralsInfo,
@@ -6238,6 +6389,7 @@ module.exports = { authentificateUser,
     getTicketTemplates,
     getTicketStats,
     uploadTicketAttachment,
-    uploadTicketMessageAttachment
+    uploadTicketMessageAttachment,
+    pharmaciesOrdersList
 
 };
